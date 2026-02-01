@@ -8,23 +8,27 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch, MagicMock
 
+from ap_common.constants import (
+    NORMALIZED_HEADER_CAMERA,
+    NORMALIZED_HEADER_GAIN,
+    NORMALIZED_HEADER_OFFSET,
+    NORMALIZED_HEADER_SETTEMP,
+    NORMALIZED_HEADER_READOUTMODE,
+    NORMALIZED_HEADER_EXPOSURESECONDS,
+    NORMALIZED_HEADER_DATE,
+    NORMALIZED_HEADER_FILTER,
+    NORMALIZED_HEADER_OPTIC,
+    NORMALIZED_HEADER_FOCALLEN,
+    TYPE_MASTER_DARK,
+    TYPE_MASTER_BIAS,
+    TYPE_MASTER_FLAT,
+)
+
 from ap_copy_master_to_blink.matching import (
     find_matching_dark,
     find_matching_bias,
     find_matching_flat,
     determine_required_masters,
-)
-from ap_copy_master_to_blink.config import (
-    KEYWORD_CAMERA,
-    KEYWORD_GAIN,
-    KEYWORD_OFFSET,
-    KEYWORD_SETTEMP,
-    KEYWORD_READOUTMODE,
-    KEYWORD_EXPOSURESECONDS,
-    KEYWORD_DATE,
-    KEYWORD_FILTER,
-    KEYWORD_OPTIC,
-    KEYWORD_FOCALLEN,
 )
 
 
@@ -35,16 +39,16 @@ class TestMatching(unittest.TestCase):
         """Set up test fixtures."""
         self.library_dir = Path("/test/library")
         self.light_metadata = {
-            KEYWORD_CAMERA: "ASI2600MM",
-            KEYWORD_GAIN: "100",
-            KEYWORD_OFFSET: "50",
-            KEYWORD_SETTEMP: "-10",
-            KEYWORD_READOUTMODE: "0",
-            KEYWORD_EXPOSURESECONDS: "300",
-            KEYWORD_FILTER: "Ha",
-            KEYWORD_DATE: "2024-01-15",
-            KEYWORD_OPTIC: "RedCat51",
-            KEYWORD_FOCALLEN: "250",
+            NORMALIZED_HEADER_CAMERA: "ASI2600MM",
+            NORMALIZED_HEADER_GAIN: "100",
+            NORMALIZED_HEADER_OFFSET: "50",
+            NORMALIZED_HEADER_SETTEMP: "-10",
+            NORMALIZED_HEADER_READOUTMODE: "0",
+            NORMALIZED_HEADER_EXPOSURESECONDS: "300",
+            NORMALIZED_HEADER_FILTER: "Ha",
+            NORMALIZED_HEADER_DATE: "2024-01-15",
+            NORMALIZED_HEADER_OPTIC: "RedCat51",
+            NORMALIZED_HEADER_FOCALLEN: "250",
         }
 
     @patch("ap_copy_master_to_blink.matching.get_filtered_metadata")
@@ -52,7 +56,7 @@ class TestMatching(unittest.TestCase):
         """Test finding dark with exact exposure match."""
         mock_get_metadata.return_value = [
             {
-                KEYWORD_EXPOSURESECONDS: "300",
+                NORMALIZED_HEADER_EXPOSURESECONDS: "300",
                 "filepath": "/test/library/dark_300s.xisf",
             }
         ]
@@ -60,18 +64,18 @@ class TestMatching(unittest.TestCase):
         result = find_matching_dark(self.library_dir, self.light_metadata)
 
         self.assertIsNotNone(result)
-        self.assertEqual(result[KEYWORD_EXPOSURESECONDS], "300")
+        self.assertEqual(result[NORMALIZED_HEADER_EXPOSURESECONDS], "300")
 
     @patch("ap_copy_master_to_blink.matching.get_filtered_metadata")
     def test_find_matching_dark_shorter_exposure(self, mock_get_metadata):
         """Test finding dark with shorter exposure (no exact match)."""
         mock_get_metadata.return_value = [
             {
-                KEYWORD_EXPOSURESECONDS: "120",
+                NORMALIZED_HEADER_EXPOSURESECONDS: "120",
                 "filepath": "/test/library/dark_120s.xisf",
             },
             {
-                KEYWORD_EXPOSURESECONDS: "60",
+                NORMALIZED_HEADER_EXPOSURESECONDS: "60",
                 "filepath": "/test/library/dark_60s.xisf",
             },
         ]
@@ -80,7 +84,7 @@ class TestMatching(unittest.TestCase):
 
         self.assertIsNotNone(result)
         # Should pick longest dark < 300s (120s)
-        self.assertEqual(result[KEYWORD_EXPOSURESECONDS], "120")
+        self.assertEqual(result[NORMALIZED_HEADER_EXPOSURESECONDS], "120")
 
     @patch("ap_copy_master_to_blink.matching.get_filtered_metadata")
     def test_find_matching_dark_no_match(self, mock_get_metadata):
@@ -137,18 +141,18 @@ class TestMatching(unittest.TestCase):
     ):
         """Test determining required masters with exact dark match."""
         mock_dark.return_value = {
-            KEYWORD_EXPOSURESECONDS: "300",
+            NORMALIZED_HEADER_EXPOSURESECONDS: "300",
             "filepath": "/test/dark.xisf",
         }
         mock_flat.return_value = {"filepath": "/test/flat.xisf"}
 
-        dark, bias, flat = determine_required_masters(
-            self.library_dir, self.light_metadata
-        )
+        masters = determine_required_masters(self.library_dir, self.light_metadata)
 
-        self.assertIsNotNone(dark)
-        self.assertIsNone(bias)  # No bias needed for exact exposure match
-        self.assertIsNotNone(flat)
+        self.assertIsNotNone(masters[TYPE_MASTER_DARK])
+        self.assertIsNone(
+            masters[TYPE_MASTER_BIAS]
+        )  # No bias needed for exact exposure match
+        self.assertIsNotNone(masters[TYPE_MASTER_FLAT])
 
     @patch("ap_copy_master_to_blink.matching.find_matching_dark")
     @patch("ap_copy_master_to_blink.matching.find_matching_bias")
@@ -158,19 +162,19 @@ class TestMatching(unittest.TestCase):
     ):
         """Test determining required masters with shorter dark and bias."""
         mock_dark.return_value = {
-            KEYWORD_EXPOSURESECONDS: "120",
+            NORMALIZED_HEADER_EXPOSURESECONDS: "120",
             "filepath": "/test/dark.xisf",
         }
         mock_bias.return_value = {"filepath": "/test/bias.xisf"}
         mock_flat.return_value = {"filepath": "/test/flat.xisf"}
 
-        dark, bias, flat = determine_required_masters(
-            self.library_dir, self.light_metadata
-        )
+        masters = determine_required_masters(self.library_dir, self.light_metadata)
 
-        self.assertIsNotNone(dark)
-        self.assertIsNotNone(bias)  # Bias needed for exposure mismatch
-        self.assertIsNotNone(flat)
+        self.assertIsNotNone(masters[TYPE_MASTER_DARK])
+        self.assertIsNotNone(
+            masters[TYPE_MASTER_BIAS]
+        )  # Bias needed for exposure mismatch
+        self.assertIsNotNone(masters[TYPE_MASTER_FLAT])
 
     @patch("ap_copy_master_to_blink.matching.find_matching_dark")
     @patch("ap_copy_master_to_blink.matching.find_matching_bias")
@@ -180,20 +184,18 @@ class TestMatching(unittest.TestCase):
     ):
         """Test determining required masters with shorter dark but no bias."""
         mock_dark.return_value = {
-            KEYWORD_EXPOSURESECONDS: "120",
+            NORMALIZED_HEADER_EXPOSURESECONDS: "120",
             "filepath": "/test/dark.xisf",
         }
         mock_bias.return_value = None  # No bias found
         mock_flat.return_value = {"filepath": "/test/flat.xisf"}
 
-        dark, bias, flat = determine_required_masters(
-            self.library_dir, self.light_metadata
-        )
+        masters = determine_required_masters(self.library_dir, self.light_metadata)
 
         # Should reject dark without bias
-        self.assertIsNone(dark)
-        self.assertIsNone(bias)
-        self.assertIsNotNone(flat)
+        self.assertIsNone(masters[TYPE_MASTER_DARK])
+        self.assertIsNone(masters[TYPE_MASTER_BIAS])
+        self.assertIsNotNone(masters[TYPE_MASTER_FLAT])
 
 
 if __name__ == "__main__":

@@ -23,13 +23,11 @@ jobs:
         python-version: '3.14'
 
     - name: Install dependencies
-      run: |
-        python -m pip install --upgrade pip
-        python -m pip install -e ".[dev]"
+      run: make install-dev
 
     - name: Generate coverage report
       run: |
-        python -m pytest --cov=ap_copy_master_to_blink --cov-report=term --cov-report=xml || true
+        make coverage || true
         python -m coverage report | tail -1 | awk '{print $$4}' | sed 's/%//' > .coverage-percentage || echo "0" > .coverage-percentage
 
     - name: Extract coverage data and set badge info

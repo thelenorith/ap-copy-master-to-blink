@@ -8,23 +8,22 @@ from pathlib import Path
 from typing import Dict, List, Set, Tuple
 import logging
 
-from ap_common import (
-    get_metadata,
-    copy_file,
-    get_filenames,
+from ap_common import get_metadata, copy_file, get_filenames
+from ap_common.constants import (
+    NORMALIZED_HEADER_CAMERA,
+    NORMALIZED_HEADER_GAIN,
+    NORMALIZED_HEADER_OFFSET,
+    NORMALIZED_HEADER_SETTEMP,
+    NORMALIZED_HEADER_READOUTMODE,
+    NORMALIZED_HEADER_EXPOSURESECONDS,
+    NORMALIZED_HEADER_FILTER,
+    NORMALIZED_HEADER_DATE,
+    TYPE_MASTER_DARK,
+    TYPE_MASTER_BIAS,
+    TYPE_MASTER_FLAT,
 )
 
-from .config import (
-    SUPPORTED_EXTENSIONS,
-    KEYWORD_CAMERA,
-    KEYWORD_GAIN,
-    KEYWORD_OFFSET,
-    KEYWORD_SETTEMP,
-    KEYWORD_READOUTMODE,
-    KEYWORD_EXPOSURESECONDS,
-    KEYWORD_FILTER,
-    KEYWORD_DATE,
-)
+from .config import SUPPORTED_EXTENSIONS
 from .matching import determine_required_masters
 
 logger = logging.getLogger(__name__)
@@ -118,14 +117,14 @@ def group_lights_by_config(
     for metadata in metadata_list:
         # Create key from calibration-relevant fields
         key = (
-            metadata.get(KEYWORD_CAMERA),
-            metadata.get(KEYWORD_GAIN),
-            metadata.get(KEYWORD_OFFSET),
-            metadata.get(KEYWORD_SETTEMP),
-            metadata.get(KEYWORD_READOUTMODE),
-            metadata.get(KEYWORD_EXPOSURESECONDS),
-            metadata.get(KEYWORD_FILTER),
-            metadata.get(KEYWORD_DATE),
+            metadata.get(NORMALIZED_HEADER_CAMERA),
+            metadata.get(NORMALIZED_HEADER_GAIN),
+            metadata.get(NORMALIZED_HEADER_OFFSET),
+            metadata.get(NORMALIZED_HEADER_SETTEMP),
+            metadata.get(NORMALIZED_HEADER_READOUTMODE),
+            metadata.get(NORMALIZED_HEADER_EXPOSURESECONDS),
+            metadata.get(NORMALIZED_HEADER_FILTER),
+            metadata.get(NORMALIZED_HEADER_DATE),
         )
 
         if key not in groups:
@@ -226,15 +225,18 @@ def process_blink_directory(
 
         logger.info(
             f"\nProcessing configuration: "
-            f"camera={light_metadata.get(KEYWORD_CAMERA)}, "
-            f"gain={light_metadata.get(KEYWORD_GAIN)}, "
-            f"exposure={light_metadata.get(KEYWORD_EXPOSURESECONDS)}s, "
-            f"filter={light_metadata.get(KEYWORD_FILTER)}, "
-            f"date={light_metadata.get(KEYWORD_DATE)}"
+            f"camera={light_metadata.get(NORMALIZED_HEADER_CAMERA)}, "
+            f"gain={light_metadata.get(NORMALIZED_HEADER_GAIN)}, "
+            f"exposure={light_metadata.get(NORMALIZED_HEADER_EXPOSURESECONDS)}s, "
+            f"filter={light_metadata.get(NORMALIZED_HEADER_FILTER)}, "
+            f"date={light_metadata.get(NORMALIZED_HEADER_DATE)}"
         )
 
         # Find required masters
-        dark, bias, flat = determine_required_masters(library_dir, light_metadata)
+        masters = determine_required_masters(library_dir, light_metadata)
+        dark = masters[TYPE_MASTER_DARK]
+        bias = masters[TYPE_MASTER_BIAS]
+        flat = masters[TYPE_MASTER_FLAT]
 
         # Get destination directory (DATE directory)
         lights_dir = Path(light_metadata["filepath"]).parent
@@ -254,7 +256,7 @@ def process_blink_directory(
         else:
             stats["darks_missing"] += 1
             logger.warning(
-                f"Missing dark for exposure={light_metadata.get(KEYWORD_EXPOSURESECONDS)}s"
+                f"Missing dark for exposure={light_metadata.get(NORMALIZED_HEADER_EXPOSURESECONDS)}s"
             )
 
         # Copy bias (if needed and found and not already copied)
@@ -275,8 +277,8 @@ def process_blink_directory(
         else:
             stats["flats_missing"] += 1
             logger.warning(
-                f"Missing flat for filter={light_metadata.get(KEYWORD_FILTER)}, "
-                f"date={light_metadata.get(KEYWORD_DATE)}"
+                f"Missing flat for filter={light_metadata.get(NORMALIZED_HEADER_FILTER)}, "
+                f"date={light_metadata.get(NORMALIZED_HEADER_DATE)}"
             )
 
     return stats
