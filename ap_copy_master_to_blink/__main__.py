@@ -168,7 +168,9 @@ Examples:
     # Return non-zero if any masters were missing
     if stats["darks_missing"] > 0 or stats["flats_missing"] > 0:
         if not args.quiet:
-            print("Warning: Some master frames are missing. Check logs above for details.")
+            print(
+                "Warning: Some master frames are missing. Check logs above for details."
+            )
         return 1
 
     return 0
