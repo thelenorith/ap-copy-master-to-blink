@@ -94,8 +94,8 @@ Examples:
   # Basic usage
   python -m ap_copy_master_to_blink <library_dir> <blink_dir>
 
-  # With dry-run
-  python -m ap_copy_master_to_blink <library_dir> <blink_dir> --dry-run
+  # With dryrun
+  python -m ap_copy_master_to_blink <library_dir> <blink_dir> --dryrun
 
   # With debug output
   python -m ap_copy_master_to_blink <library_dir> <blink_dir> --debug
@@ -120,9 +120,16 @@ Examples:
     )
 
     parser.add_argument(
-        "--dry-run",
+        "--dryrun",
         action="store_true",
         help="Show what would be copied without actually copying files",
+    )
+
+    parser.add_argument(
+        "--quiet",
+        "-q",
+        action="store_true",
+        help="Suppress progress output",
     )
 
     parser.add_argument(
@@ -148,17 +155,20 @@ Examples:
         return 1
 
     # Print header
-    print_header(library_dir, blink_dir, args.dry_run)
+    if not args.quiet:
+        print_header(library_dir, blink_dir, args.dryrun)
 
     # Process blink directory
-    stats = process_blink_directory(library_dir, blink_dir, dry_run=args.dry_run)
+    stats = process_blink_directory(library_dir, blink_dir, dry_run=args.dryrun)
 
     # Print summary
-    print_summary(stats)
+    if not args.quiet:
+        print_summary(stats)
 
     # Return non-zero if any masters were missing
     if stats["darks_missing"] > 0 or stats["flats_missing"] > 0:
-        print("Warning: Some master frames are missing. Check logs above for details.")
+        if not args.quiet:
+            print("Warning: Some master frames are missing. Check logs above for details.")
         return 1
 
     return 0
