@@ -175,6 +175,14 @@ Tests cover:
 - File copying and directory scanning
 - Edge cases (missing masters, date mismatches)
 
+## Documentation
+
+This tool is part of the astrophotography pipeline. For comprehensive documentation including workflow guides and integration with other tools, see:
+
+- [Pipeline Overview](https://github.com/jewzaam/ap-base/blob/main/docs/index.md) - Full pipeline documentation
+- [Workflow Guide](https://github.com/jewzaam/ap-base/blob/main/docs/workflow.md) - Detailed workflow with diagrams
+- [ap-copy-master-to-blink Reference](https://github.com/jewzaam/ap-base/blob/main/docs/tools/ap-copy-master-to-blink.md) - API reference for this tool
+
 ## Repository
 
 GitHub: https://github.com/jewzaam/ap-copy-master-to-blink
