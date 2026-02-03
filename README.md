@@ -175,12 +175,6 @@ Tests cover:
 - File copying and directory scanning
 - Edge cases (missing masters, date mismatches)
 
-## Documentation
-
-- [Pipeline Overview](docs/pipeline-overview.md) - High-level architecture and data flow
-- [Workflow Guide](docs/workflow-guide.md) - Step-by-step usage with diagrams
-- [API Reference](docs/api-reference.md) - Tool-specific API documentation
-
 ## Repository
 
 GitHub: https://github.com/jewzaam/ap-copy-master-to-blink
