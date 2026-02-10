@@ -69,13 +69,36 @@ def print_summary(stats: Dict[str, int]) -> None:
     Args:
         stats: Statistics dictionary from process_blink_directory
     """
+
+    def plural(count: int, singular: str) -> str:
+        """Format count with singular/plural form."""
+        return f"{count} {singular}{'s' if count != 1 else ''}"
+
+    def status_indicator(present: int, needed: int) -> str:
+        """Return status indicator based on present vs needed."""
+        return "ok" if present >= needed else "MISSING!"
+
     print(f"\n{'='*70}")
     print("Summary")
     print(f"{'='*70}")
-    print(f"Configurations: {stats['configs_processed']}")
-    print(f"Biases: {stats['biases_present']} of {stats['biases_needed']}")
-    print(f"Darks:  {stats['darks_present']} of {stats['darks_needed']}")
-    print(f"Flats:  {stats['flats_present']} of {stats['flats_needed']}")
+    print(
+        f"Frames: {stats['frame_count']} lights "
+        f"({plural(stats['target_count'], 'target')}, "
+        f"{plural(stats['date_count'], 'date')}, "
+        f"{plural(stats['filter_count'], 'filter')})"
+    )
+    print(
+        f"Biases: {stats['biases_present']} of {stats['biases_needed']} | "
+        f"{status_indicator(stats['biases_present'], stats['biases_needed'])}"
+    )
+    print(
+        f"Darks:  {stats['darks_present']} of {stats['darks_needed']} | "
+        f"{status_indicator(stats['darks_present'], stats['darks_needed'])}"
+    )
+    print(
+        f"Flats:  {stats['flats_present']} of {stats['flats_needed']} | "
+        f"{status_indicator(stats['flats_present'], stats['flats_needed'])}"
+    )
     print(f"{'='*70}\n")
 
 

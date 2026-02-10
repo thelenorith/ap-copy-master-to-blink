@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Dict, List, Set, Tuple
 import logging
 
-from ap_common import get_metadata, copy_file
+from ap_common import get_metadata, get_filtered_metadata, copy_file
 from ap_common.progress import progress_iter
 from ap_common.constants import (
     NORMALIZED_HEADER_CAMERA,
@@ -20,6 +20,8 @@ from ap_common.constants import (
     NORMALIZED_HEADER_FILTER,
     NORMALIZED_HEADER_DATE,
     NORMALIZED_HEADER_FILENAME,
+    NORMALIZED_HEADER_TYPE,
+    TYPE_LIGHT,
     TYPE_MASTER_DARK,
     TYPE_MASTER_BIAS,
     TYPE_MASTER_FLAT,
@@ -84,15 +86,14 @@ def scan_blink_directories(
     """
     logger.debug(f"Scanning blink directory: {blink_dir}")
 
-    # Get metadata for all light frames
-    # Convert extensions to regex patterns for get_metadata
+    # Get metadata for light frames only (exclude master calibration frames)
     patterns = [rf".*\{ext}$" for ext in SUPPORTED_EXTENSIONS]
-    metadata = get_metadata(
+    metadata = get_filtered_metadata(
         dirs=[str(blink_dir)],
+        filters={NORMALIZED_HEADER_TYPE: TYPE_LIGHT},
         profileFromPath=True,
         patterns=patterns,
         recursive=True,
-        required_properties=[],
         printStatus=not quiet,
     )
 
@@ -100,7 +101,7 @@ def scan_blink_directories(
         logger.warning(f"No light frames found in {blink_dir}")
         return []
 
-    # Convert metadata dict to list of dicts (get_metadata returns {filename: metadata})
+    # Convert metadata dict to list of dicts (get_filtered_metadata returns {filename: metadata})
     metadata_list = list(metadata.values())
 
     logger.debug(f"Found {len(metadata_list)} light frames")
@@ -198,6 +199,10 @@ def process_blink_directory(
 
     Returns:
         Dictionary with summary statistics:
+        - frame_count: Total number of light frames
+        - target_count: Number of unique targets
+        - date_count: Number of unique dates
+        - filter_count: Number of unique filters
         - darks_needed: Number of DATE directories that need darks
         - darks_present: Number of DATE directories that have darks
         - biases_needed: Number of DATE directories that need biases
@@ -207,6 +212,10 @@ def process_blink_directory(
         - configs_processed: Number of unique calibration configs processed
     """
     stats = {
+        "frame_count": 0,
+        "target_count": 0,
+        "date_count": 0,
+        "filter_count": 0,
         "darks_needed": 0,
         "darks_present": 0,
         "biases_needed": 0,
@@ -222,6 +231,35 @@ def process_blink_directory(
     if not metadata_list:
         logger.warning("No light frames found to process")
         return stats
+
+    # Extract organizational metrics
+    targets = set()
+    dates = set()
+    filters = set()
+
+    for metadata in metadata_list:
+        # Extract target from path (blink_dir/TARGET/DATE/FILTER/file)
+        light_path = Path(metadata[NORMALIZED_HEADER_FILENAME])
+        try:
+            # Get relative path from blink_dir
+            rel_path = light_path.relative_to(blink_dir)
+            # First component is TARGET
+            target = rel_path.parts[0]
+            targets.add(target)
+        except (ValueError, IndexError):
+            # Can't extract target from path
+            pass
+
+        # Extract date and filter from metadata
+        if NORMALIZED_HEADER_DATE in metadata:
+            dates.add(metadata[NORMALIZED_HEADER_DATE])
+        if NORMALIZED_HEADER_FILTER in metadata:
+            filters.add(metadata[NORMALIZED_HEADER_FILTER])
+
+    stats["frame_count"] = len(metadata_list)
+    stats["target_count"] = len(targets)
+    stats["date_count"] = len(dates)
+    stats["filter_count"] = len(filters)
 
     # Group by calibration configuration
     groups = group_lights_by_config(metadata_list)

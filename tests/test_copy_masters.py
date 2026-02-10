@@ -61,11 +61,11 @@ class TestCopyMasters(unittest.TestCase):
 
         self.assertEqual(result.name, "DATE_2024-01-15")
 
-    @patch("ap_copy_master_to_blink.copy_masters.get_metadata")
-    def test_scan_blink_directories(self, mock_get_metadata):
+    @patch("ap_copy_master_to_blink.copy_masters.get_filtered_metadata")
+    def test_scan_blink_directories(self, mock_get_filtered_metadata):
         """Test scanning blink directories for light frames."""
-        # get_metadata returns a dict of {filename: metadata}
-        mock_get_metadata.return_value = {
+        # get_filtered_metadata returns a dict of {filename: metadata}
+        mock_get_filtered_metadata.return_value = {
             "/blink/light1.fits": {NORMALIZED_HEADER_FILENAME: "/blink/light1.fits"},
             "/blink/light2.fits": {NORMALIZED_HEADER_FILENAME: "/blink/light2.fits"},
         }
@@ -73,7 +73,7 @@ class TestCopyMasters(unittest.TestCase):
         result = scan_blink_directories(Path("/blink"))
 
         self.assertEqual(len(result), 2)
-        mock_get_metadata.assert_called_once()
+        mock_get_filtered_metadata.assert_called_once()
 
     def test_group_lights_by_config(self):
         """Test grouping lights by calibration configuration."""
@@ -213,6 +213,10 @@ class TestCopyMasters(unittest.TestCase):
 
         stats = process_blink_directory(Path("/library"), Path("/blink"), dry_run=False)
 
+        self.assertEqual(stats["frame_count"], 1)
+        self.assertEqual(stats["target_count"], 1)
+        self.assertEqual(stats["date_count"], 1)
+        self.assertEqual(stats["filter_count"], 1)
         self.assertEqual(stats["configs_processed"], 1)
         self.assertEqual(stats["darks_needed"], 1)
         self.assertEqual(stats["darks_present"], 1)
@@ -256,6 +260,10 @@ class TestCopyMasters(unittest.TestCase):
 
         stats = process_blink_directory(Path("/library"), Path("/blink"), dry_run=False)
 
+        self.assertEqual(stats["frame_count"], 1)
+        self.assertEqual(stats["target_count"], 1)
+        self.assertEqual(stats["date_count"], 1)
+        self.assertEqual(stats["filter_count"], 1)
         self.assertEqual(stats["configs_processed"], 1)
         self.assertEqual(stats["darks_needed"], 1)
         self.assertEqual(stats["darks_present"], 0)
@@ -329,6 +337,10 @@ class TestCLIFunctions(unittest.TestCase):
     def test_print_summary(self, mock_stdout):
         """Test summary printing."""
         stats = {
+            "frame_count": 100,
+            "target_count": 2,
+            "date_count": 1,
+            "filter_count": 1,
             "configs_processed": 2,
             "darks_needed": 3,
             "darks_present": 2,
@@ -342,15 +354,20 @@ class TestCLIFunctions(unittest.TestCase):
 
         output = mock_stdout.getvalue()
         self.assertIn("Summary", output)
-        self.assertIn("Configurations: 2", output)
-        self.assertIn("Darks:  2 of 3", output)
-        self.assertIn("Biases: 1 of 1", output)
-        self.assertIn("Flats:  3 of 3", output)
+        self.assertIn("Frames: 100 lights (2 targets, 1 date, 1 filter)", output)
+        self.assertIn("Darks:  2 of 3 | MISSING!", output)
+        self.assertIn("Biases: 1 of 1 | ok", output)
+        self.assertIn("Flats:  3 of 3 | ok", output)
+        self.assertNotIn("Configurations:", output)
 
     @patch("sys.stdout", new_callable=StringIO)
     def test_print_summary_order(self, mock_stdout):
         """Test that summary prints in bias, dark, flat order."""
         stats = {
+            "frame_count": 50,
+            "target_count": 1,
+            "date_count": 1,
+            "filter_count": 1,
             "configs_processed": 1,
             "darks_needed": 1,
             "darks_present": 1,
