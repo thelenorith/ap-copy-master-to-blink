@@ -208,6 +208,89 @@ class TestMatching(unittest.TestCase):
         self.assertIsNone(masters[TYPE_MASTER_BIAS])
         self.assertIsNotNone(masters[TYPE_MASTER_FLAT])
 
+    @patch("ap_copy_master_to_blink.matching.get_filtered_metadata")
+    def test_find_matching_dark_none_filter_normalized(self, mock_get_metadata):
+        """Test that None filter is normalized to empty string in filter criteria."""
+        # Light with None filter
+        light_with_none_filter = self.light_metadata.copy()
+        light_with_none_filter[NORMALIZED_HEADER_FILTER] = None
+
+        mock_get_metadata.return_value = {
+            "/test/library/dark_300s.xisf": {
+                NORMALIZED_HEADER_EXPOSURESECONDS: "300",
+                NORMALIZED_HEADER_FILENAME: "/test/library/dark_300s.xisf",
+            }
+        }
+
+        result = find_matching_dark(self.library_dir, light_with_none_filter)
+
+        # Verify get_filtered_metadata was called with normalized (empty string) values
+        call_args = mock_get_metadata.call_args
+        filters = call_args[1]["filters"]
+
+        # Camera should be normalized (not None)
+        self.assertEqual(filters[NORMALIZED_HEADER_CAMERA], "ASI2600MM")
+        # No filter key should be present with empty string after normalization
+        # (empty strings are removed from filter criteria)
+        self.assertIsNotNone(result)
+
+    @patch("ap_copy_master_to_blink.matching.get_filtered_metadata")
+    def test_find_matching_flat_none_filter_normalized(self, mock_get_metadata):
+        """Test that None filter is normalized to empty string for flat matching."""
+        # Light with None filter
+        light_with_none_filter = self.light_metadata.copy()
+        light_with_none_filter[NORMALIZED_HEADER_FILTER] = None
+
+        mock_get_metadata.return_value = {
+            "/test/library/flat_nofilter.xisf": {
+                NORMALIZED_HEADER_FILENAME: "/test/library/flat_nofilter.xisf"
+            }
+        }
+
+        result = find_matching_flat(self.library_dir, light_with_none_filter)
+
+        # Verify get_filtered_metadata was called
+        self.assertTrue(mock_get_metadata.called)
+
+        # Verify result was found
+        self.assertIsNotNone(result)
+        self.assertEqual(
+            result[NORMALIZED_HEADER_FILENAME], "/test/library/flat_nofilter.xisf"
+        )
+
+    @patch("ap_copy_master_to_blink.matching.get_filtered_metadata")
+    def test_find_matching_bias_none_values_normalized(self, mock_get_metadata):
+        """Test that None values in multiple fields are normalized to empty string."""
+        # Light with multiple None values
+        light_with_nones = {
+            NORMALIZED_HEADER_CAMERA: "ASI2600MM",
+            NORMALIZED_HEADER_GAIN: None,  # None value
+            NORMALIZED_HEADER_OFFSET: None,  # None value
+            NORMALIZED_HEADER_SETTEMP: "-10",
+            NORMALIZED_HEADER_READOUTMODE: "0",
+            NORMALIZED_HEADER_EXPOSURESECONDS: "300",
+        }
+
+        mock_get_metadata.return_value = {
+            "/test/library/bias.xisf": {
+                NORMALIZED_HEADER_FILENAME: "/test/library/bias.xisf"
+            }
+        }
+
+        _ = find_matching_bias(self.library_dir, light_with_nones)
+
+        # Verify get_filtered_metadata was called
+        self.assertTrue(mock_get_metadata.called)
+
+        # Verify None values were handled (empty strings removed from criteria)
+        call_args = mock_get_metadata.call_args
+        filters = call_args[1]["filters"]
+
+        # Camera should be present
+        self.assertEqual(filters[NORMALIZED_HEADER_CAMERA], "ASI2600MM")
+        # Settemp should be present
+        self.assertEqual(filters[NORMALIZED_HEADER_SETTEMP], "-10")
+
 
 if __name__ == "__main__":
     unittest.main()
