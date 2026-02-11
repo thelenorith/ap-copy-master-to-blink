@@ -34,20 +34,20 @@ logger = logging.getLogger(__name__)
 def find_matching_dark(
     library_dir: Path,
     light_metadata: Dict[str, str],
+    allow_bias: bool = False,
 ) -> Optional[Dict[str, str]]:
     """
     Find matching dark frame for a light frame.
 
     Priority:
     1. Exact exposure match
-    2. If no exact match: Find longest dark exposure < light exposure
-
-    Note: Caller is responsible for determining if bias is needed when
-    dark exposure < light exposure.
+    2. If allow_bias=True and no exact match: Find longest dark exposure < light exposure
 
     Args:
         library_dir: Path to calibration library
         light_metadata: Metadata dictionary for light frame
+        allow_bias: If False, only exact exposure match darks are returned.
+                   If True, shorter exposure darks are also allowed.
 
     Returns:
         Metadata dict for matching dark, or None if no match found
@@ -111,6 +111,13 @@ def find_matching_dark(
             )
         logger.debug(f"Found exact dark exposure match: {exposure}s")
         return exact_matches[0]
+
+    # No exact match - check if bias frames are allowed
+    if not allow_bias:
+        logger.debug(
+            f"No exact exposure match for {exposure}s and bias frames not allowed"
+        )
+        return None
 
     logger.debug(f"No exact exposure match for {exposure}s, looking for shorter dark")
 
@@ -265,6 +272,7 @@ def find_matching_flat(
 def determine_required_masters(
     library_dir: Path,
     light_metadata: Dict[str, str],
+    allow_bias: bool = False,
 ) -> Dict[str, Optional[Dict[str, str]]]:
     """
     Determine which master frames are required for a light frame.
@@ -272,6 +280,8 @@ def determine_required_masters(
     Args:
         library_dir: Path to calibration library
         light_metadata: Metadata dictionary for light frame
+        allow_bias: If False, only exact exposure match darks are allowed.
+                   If True, shorter exposure darks with bias are allowed.
 
     Returns:
         Dictionary with keys:
@@ -281,7 +291,7 @@ def determine_required_masters(
     """
     logger.debug("Determining required masters for light frame")
 
-    dark = find_matching_dark(library_dir, light_metadata)
+    dark = find_matching_dark(library_dir, light_metadata, allow_bias=allow_bias)
     bias = None
     flat = find_matching_flat(library_dir, light_metadata)
 

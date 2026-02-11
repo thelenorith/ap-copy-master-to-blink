@@ -156,6 +156,13 @@ Examples:
         help="Enable debug logging",
     )
 
+    parser.add_argument(
+        "--allow-bias",
+        action="store_true",
+        help="Allow shorter darks with bias frames. "
+        "Default: only exact exposure match darks are copied.",
+    )
+
     args = parser.parse_args()
 
     # Setup logging
@@ -177,7 +184,11 @@ Examples:
 
     # Process blink directory
     stats = process_blink_directory(
-        library_dir, blink_dir, dry_run=args.dryrun, quiet=args.quiet
+        library_dir,
+        blink_dir,
+        dry_run=args.dryrun,
+        quiet=args.quiet,
+        allow_bias=args.allow_bias,
     )
 
     # Print summary

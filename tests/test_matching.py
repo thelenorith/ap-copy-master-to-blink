@@ -69,7 +69,7 @@ class TestMatching(unittest.TestCase):
 
     @patch("ap_copy_master_to_blink.matching.get_filtered_metadata")
     def test_find_matching_dark_shorter_exposure(self, mock_get_metadata):
-        """Test finding dark with shorter exposure (no exact match)."""
+        """Test finding dark with shorter exposure when bias allowed."""
         mock_get_metadata.return_value = {
             "/test/library/dark_120s.xisf": {
                 NORMALIZED_HEADER_EXPOSURESECONDS: "120",
@@ -81,7 +81,9 @@ class TestMatching(unittest.TestCase):
             },
         }
 
-        result = find_matching_dark(self.library_dir, self.light_metadata)
+        result = find_matching_dark(
+            self.library_dir, self.light_metadata, allow_bias=True
+        )
 
         self.assertIsNotNone(result)
         # Should pick longest dark < 300s (120s)
