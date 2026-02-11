@@ -123,6 +123,88 @@ class TestCopyMasters(unittest.TestCase):
         oiii_groups = [g for g in groups.values() if len(g) == 1]
         self.assertEqual(len(oiii_groups), 1)
 
+    def test_group_lights_by_config_none_filter_normalization(self):
+        """Test that None filter values are normalized to empty string for grouping."""
+        metadata_list = [
+            {
+                NORMALIZED_HEADER_CAMERA: "ASI2600MM",
+                NORMALIZED_HEADER_GAIN: "100",
+                NORMALIZED_HEADER_OFFSET: "50",
+                NORMALIZED_HEADER_SETTEMP: "-10",
+                NORMALIZED_HEADER_READOUTMODE: "0",
+                NORMALIZED_HEADER_EXPOSURESECONDS: "300",
+                NORMALIZED_HEADER_FILTER: None,  # No filter
+                NORMALIZED_HEADER_DATE: "2024-01-15",
+            },
+            {
+                NORMALIZED_HEADER_CAMERA: "ASI2600MM",
+                NORMALIZED_HEADER_GAIN: "100",
+                NORMALIZED_HEADER_OFFSET: "50",
+                NORMALIZED_HEADER_SETTEMP: "-10",
+                NORMALIZED_HEADER_READOUTMODE: "0",
+                NORMALIZED_HEADER_EXPOSURESECONDS: "300",
+                NORMALIZED_HEADER_FILTER: None,  # No filter
+                NORMALIZED_HEADER_DATE: "2024-01-15",
+            },
+            {
+                NORMALIZED_HEADER_CAMERA: "ASI2600MM",
+                NORMALIZED_HEADER_GAIN: "100",
+                NORMALIZED_HEADER_OFFSET: "50",
+                NORMALIZED_HEADER_SETTEMP: "-10",
+                NORMALIZED_HEADER_READOUTMODE: "0",
+                NORMALIZED_HEADER_EXPOSURESECONDS: "300",
+                NORMALIZED_HEADER_FILTER: "Ha",  # Different filter
+                NORMALIZED_HEADER_DATE: "2024-01-15",
+            },
+        ]
+
+        groups = group_lights_by_config(metadata_list)
+
+        # Should have 2 groups (None normalized to "" and "Ha")
+        self.assertEqual(len(groups), 2)
+
+        # None filter group should have 2 lights
+        none_filter_groups = [g for g in groups.values() if len(g) == 2]
+        self.assertEqual(len(none_filter_groups), 1)
+
+        # Ha filter group should have 1 light
+        ha_filter_groups = [g for g in groups.values() if len(g) == 1]
+        self.assertEqual(len(ha_filter_groups), 1)
+
+    def test_group_lights_by_config_multiple_none_values(self):
+        """Test that multiple None values in different fields are normalized."""
+        metadata_list = [
+            {
+                NORMALIZED_HEADER_CAMERA: "ASI2600MM",
+                NORMALIZED_HEADER_GAIN: None,  # None value
+                NORMALIZED_HEADER_OFFSET: None,  # None value
+                NORMALIZED_HEADER_SETTEMP: "-10",
+                NORMALIZED_HEADER_READOUTMODE: "0",
+                NORMALIZED_HEADER_EXPOSURESECONDS: "300",
+                NORMALIZED_HEADER_FILTER: None,  # None value
+                NORMALIZED_HEADER_DATE: "2024-01-15",
+            },
+            {
+                NORMALIZED_HEADER_CAMERA: "ASI2600MM",
+                NORMALIZED_HEADER_GAIN: None,  # None value
+                NORMALIZED_HEADER_OFFSET: None,  # None value
+                NORMALIZED_HEADER_SETTEMP: "-10",
+                NORMALIZED_HEADER_READOUTMODE: "0",
+                NORMALIZED_HEADER_EXPOSURESECONDS: "300",
+                NORMALIZED_HEADER_FILTER: None,  # None value
+                NORMALIZED_HEADER_DATE: "2024-01-15",
+            },
+        ]
+
+        groups = group_lights_by_config(metadata_list)
+
+        # Should have 1 group (all None values normalized to "")
+        self.assertEqual(len(groups), 1)
+
+        # Group should contain both lights
+        single_group = list(groups.values())[0]
+        self.assertEqual(len(single_group), 2)
+
     @patch("ap_copy_master_to_blink.copy_masters.copy_file")
     def test_copy_master_to_blink_new_file(self, mock_copy_file):
         """Test copying master when file doesn't exist."""
@@ -611,8 +693,7 @@ class TestIntegrationOld(unittest.TestCase):
     def test_find_matching_dark_with_missing_metadata(self):
         """Test find_matching_dark handles missing metadata fields.
 
-        Regression test for bug where None values in filter criteria
-        caused ValueError in filter_metadata.
+        Tests that matching works with empty string (normalized from None).
         """
         import tempfile
         from ap_copy_master_to_blink.matching import find_matching_dark
@@ -621,25 +702,19 @@ class TestIntegrationOld(unittest.TestCase):
             library_dir = Path(tmpdir) / "library"
             library_dir.mkdir()
 
-            # Light metadata with missing readoutmode (None)
+            # Light metadata with missing readoutmode (normalized to empty string)
             light_metadata = {
                 NORMALIZED_HEADER_CAMERA: "TestCam",
                 NORMALIZED_HEADER_GAIN: "100",
                 NORMALIZED_HEADER_OFFSET: "10",
                 NORMALIZED_HEADER_SETTEMP: "-10.00",
-                NORMALIZED_HEADER_READOUTMODE: None,  # This causes the bug
+                NORMALIZED_HEADER_READOUTMODE: "",  # Normalized from None
                 NORMALIZED_HEADER_EXPOSURESECONDS: "60.00",
             }
 
-            # This should not raise ValueError about None filter value
-            try:
-                result = find_matching_dark(library_dir, light_metadata)
-                # We expect None because no masters exist
-                self.assertIsNone(result)
-            except ValueError as e:
-                if "has no value 'None'" in str(e):
-                    self.fail(f"filter_metadata() rejects None values: {e}")
-                raise
+            result = find_matching_dark(library_dir, light_metadata)
+            # We expect None because no masters exist
+            self.assertIsNone(result)
 
     def test_scan_blink_directories_integration(self):
         """Test scan_blink_directories with real get_filenames call.

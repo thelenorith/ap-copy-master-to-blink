@@ -65,8 +65,6 @@ def find_matching_dark(
             NORMALIZED_HEADER_READOUTMODE
         ),
     }
-    # Remove None values from filter criteria (filter_metadata rejects None)
-    filter_criteria = {k: v for k, v in filter_criteria.items() if v is not None}
 
     logger.debug(f"Searching for dark with criteria: {filter_criteria}")
     logger.debug(f"Target exposure: {exposure}s")
@@ -167,8 +165,6 @@ def find_matching_bias(
             NORMALIZED_HEADER_READOUTMODE
         ),
     }
-    # Remove None values from filter criteria (filter_metadata rejects None)
-    filter_criteria = {k: v for k, v in filter_criteria.items() if v is not None}
 
     logger.debug(f"Searching for bias with criteria: {filter_criteria}")
 
@@ -235,8 +231,6 @@ def find_matching_flat(
             NORMALIZED_HEADER_DATE
         ),  # Exact match required
     }
-    # Remove None values from filter criteria (filter_metadata rejects None)
-    filter_criteria = {k: v for k, v in filter_criteria.items() if v is not None}
 
     logger.debug(f"Searching for flat with criteria: {filter_criteria}")
 
