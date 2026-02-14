@@ -29,6 +29,8 @@ from ap_copy_master_to_blink.matching import (
     find_matching_dark,
     find_matching_bias,
     find_matching_flat,
+    find_candidate_flat_dates,
+    find_flat_for_date,
     determine_required_masters,
 )
 
@@ -486,6 +488,253 @@ class TestLibraryProfileFromPath(unittest.TestCase):
             call_kwargs["printStatus"],
             "Library searches should be silent (printStatus=False)",
         )
+
+
+class TestCandidateFlatDates(unittest.TestCase):
+    """Tests for find_candidate_flat_dates function."""
+
+    def setUp(self):
+        """Set up test fixtures."""
+        self.library_dir = Path("/test/library")
+        self.light_metadata = {
+            NORMALIZED_HEADER_CAMERA: "ASI2600MM",
+            NORMALIZED_HEADER_GAIN: "100",
+            NORMALIZED_HEADER_OFFSET: "50",
+            NORMALIZED_HEADER_SETTEMP: "-10",
+            NORMALIZED_HEADER_READOUTMODE: "0",
+            NORMALIZED_HEADER_EXPOSURESECONDS: "300",
+            NORMALIZED_HEADER_FILTER: "Ha",
+            NORMALIZED_HEADER_DATE: "2024-01-15",
+            NORMALIZED_HEADER_OPTIC: "RedCat51",
+            NORMALIZED_HEADER_FOCALLEN: "250",
+        }
+
+    @patch("ap_copy_master_to_blink.matching.find_flats_util")
+    def test_find_candidates_no_matches(self, mock_find_flats):
+        """No library matches returns empty dict."""
+        mock_find_flats.return_value = []
+
+        result = find_candidate_flat_dates(self.library_dir, self.light_metadata)
+        self.assertEqual(result, {})
+
+    @patch("ap_copy_master_to_blink.matching.find_flats_util")
+    def test_find_candidates_multiple_dates(self, mock_find_flats):
+        """Multiple dates are returned as separate entries."""
+        mock_find_flats.return_value = [
+            {
+                NORMALIZED_HEADER_DATE: "2024-01-10",
+                NORMALIZED_HEADER_FILENAME: "/lib/flat_10.xisf",
+            },
+            {
+                NORMALIZED_HEADER_DATE: "2024-01-15",
+                NORMALIZED_HEADER_FILENAME: "/lib/flat_15.xisf",
+            },
+            {
+                NORMALIZED_HEADER_DATE: "2024-01-20",
+                NORMALIZED_HEADER_FILENAME: "/lib/flat_20.xisf",
+            },
+        ]
+
+        result = find_candidate_flat_dates(self.library_dir, self.light_metadata)
+
+        self.assertEqual(len(result), 3)
+        self.assertIn("2024-01-10", result)
+        self.assertIn("2024-01-15", result)
+        self.assertIn("2024-01-20", result)
+
+    @patch("ap_copy_master_to_blink.matching.find_flats_util")
+    def test_find_candidates_cutoff_filters(self, mock_find_flats):
+        """Cutoff date filters out older candidates."""
+        mock_find_flats.return_value = [
+            {
+                NORMALIZED_HEADER_DATE: "2024-01-05",
+                NORMALIZED_HEADER_FILENAME: "/lib/flat_05.xisf",
+            },
+            {
+                NORMALIZED_HEADER_DATE: "2024-01-10",
+                NORMALIZED_HEADER_FILENAME: "/lib/flat_10.xisf",
+            },
+            {
+                NORMALIZED_HEADER_DATE: "2024-01-15",
+                NORMALIZED_HEADER_FILENAME: "/lib/flat_15.xisf",
+            },
+        ]
+
+        result = find_candidate_flat_dates(
+            self.library_dir,
+            self.light_metadata,
+            cutoff_date="2024-01-10",
+        )
+
+        self.assertEqual(len(result), 2)
+        self.assertNotIn("2024-01-05", result)
+        self.assertIn("2024-01-10", result)
+        self.assertIn("2024-01-15", result)
+
+    @patch("ap_copy_master_to_blink.matching.find_flats_util")
+    def test_find_candidates_no_cutoff(self, mock_find_flats):
+        """Without cutoff, all dates are returned."""
+        mock_find_flats.return_value = [
+            {
+                NORMALIZED_HEADER_DATE: "2023-01-01",
+                NORMALIZED_HEADER_FILENAME: "/lib/flat_old.xisf",
+            },
+            {
+                NORMALIZED_HEADER_DATE: "2024-12-31",
+                NORMALIZED_HEADER_FILENAME: "/lib/flat_new.xisf",
+            },
+        ]
+
+        result = find_candidate_flat_dates(self.library_dir, self.light_metadata)
+        self.assertEqual(len(result), 2)
+
+    @patch("ap_copy_master_to_blink.matching.find_flats_util")
+    def test_find_candidates_deduplicates_by_date(self, mock_find_flats):
+        """Multiple flats for same date return only first match."""
+        mock_find_flats.return_value = [
+            {
+                NORMALIZED_HEADER_DATE: "2024-01-15",
+                NORMALIZED_HEADER_FILENAME: "/lib/flat_15a.xisf",
+            },
+            {
+                NORMALIZED_HEADER_DATE: "2024-01-15",
+                NORMALIZED_HEADER_FILENAME: "/lib/flat_15b.xisf",
+            },
+        ]
+
+        result = find_candidate_flat_dates(self.library_dir, self.light_metadata)
+
+        self.assertEqual(len(result), 1)
+        # Should keep first match
+        self.assertEqual(
+            result["2024-01-15"][NORMALIZED_HEADER_FILENAME],
+            "/lib/flat_15a.xisf",
+        )
+
+    @patch("ap_copy_master_to_blink.matching.find_flats_util")
+    def test_find_candidates_omits_date_from_match_fields(self, mock_find_flats):
+        """Verify date is NOT in match_fields (flexible matching)."""
+        mock_find_flats.return_value = []
+
+        find_candidate_flat_dates(self.library_dir, self.light_metadata)
+
+        mock_find_flats.assert_called_once()
+        call_kwargs = mock_find_flats.call_args[1]
+        self.assertNotIn(
+            NORMALIZED_HEADER_DATE,
+            call_kwargs["match_fields"],
+            "find_candidate_flat_dates must NOT include date in match_fields",
+        )
+
+    @patch("ap_copy_master_to_blink.matching.find_flats_util")
+    def test_find_candidates_uses_profileFromPath_false(self, mock_find_flats):
+        """Verify profileFromPath=False for library search."""
+        mock_find_flats.return_value = []
+
+        find_candidate_flat_dates(self.library_dir, self.light_metadata)
+
+        call_kwargs = mock_find_flats.call_args[1]
+        self.assertFalse(call_kwargs["profileFromPath"])
+
+    @patch("ap_copy_master_to_blink.matching.find_flats_util")
+    def test_find_candidates_skips_entries_without_date(self, mock_find_flats):
+        """Entries without a date field are skipped."""
+        mock_find_flats.return_value = [
+            {NORMALIZED_HEADER_FILENAME: "/lib/flat_nodate.xisf"},
+            {
+                NORMALIZED_HEADER_DATE: "2024-01-15",
+                NORMALIZED_HEADER_FILENAME: "/lib/flat_15.xisf",
+            },
+        ]
+
+        result = find_candidate_flat_dates(self.library_dir, self.light_metadata)
+
+        self.assertEqual(len(result), 1)
+        self.assertIn("2024-01-15", result)
+
+
+class TestFindFlatForDate(unittest.TestCase):
+    """Tests for find_flat_for_date function."""
+
+    def setUp(self):
+        """Set up test fixtures."""
+        self.library_dir = Path("/test/library")
+        self.light_metadata = {
+            NORMALIZED_HEADER_CAMERA: "ASI2600MM",
+            NORMALIZED_HEADER_GAIN: "100",
+            NORMALIZED_HEADER_OFFSET: "50",
+            NORMALIZED_HEADER_SETTEMP: "-10",
+            NORMALIZED_HEADER_READOUTMODE: "0",
+            NORMALIZED_HEADER_EXPOSURESECONDS: "300",
+            NORMALIZED_HEADER_FILTER: "Ha",
+            NORMALIZED_HEADER_DATE: "2024-01-15",
+            NORMALIZED_HEADER_OPTIC: "RedCat51",
+            NORMALIZED_HEADER_FOCALLEN: "250",
+        }
+
+    @patch("ap_copy_master_to_blink.matching.find_flats_util")
+    def test_find_flat_for_different_date(self, mock_find_flats):
+        """Find flat using a different date than light's date."""
+        mock_find_flats.return_value = [
+            {
+                NORMALIZED_HEADER_FILENAME: "/lib/flat_10.xisf",
+                NORMALIZED_HEADER_DATE: "2024-01-10",
+            }
+        ]
+
+        result = find_flat_for_date(self.library_dir, self.light_metadata, "2024-01-10")
+
+        self.assertIsNotNone(result)
+        # Verify the search used the target date
+        call_args = mock_find_flats.call_args
+        search_metadata = call_args[0][1]
+        self.assertEqual(search_metadata[NORMALIZED_HEADER_DATE], "2024-01-10")
+
+    @patch("ap_copy_master_to_blink.matching.find_flats_util")
+    def test_find_flat_for_date_no_match(self, mock_find_flats):
+        """No match for target date returns None."""
+        mock_find_flats.return_value = []
+
+        result = find_flat_for_date(self.library_dir, self.light_metadata, "2024-01-10")
+
+        self.assertIsNone(result)
+
+    @patch("ap_copy_master_to_blink.matching.find_flats_util")
+    def test_find_flat_for_date_uses_profileFromPath_false(self, mock_find_flats):
+        """Verify profileFromPath=False for library search."""
+        mock_find_flats.return_value = []
+
+        find_flat_for_date(self.library_dir, self.light_metadata, "2024-01-10")
+
+        call_kwargs = mock_find_flats.call_args[1]
+        self.assertFalse(call_kwargs["profileFromPath"])
+
+    @patch("ap_copy_master_to_blink.matching.find_flats_util")
+    def test_find_flat_for_date_includes_date_in_match_fields(self, mock_find_flats):
+        """Verify date IS in match_fields (exact date search)."""
+        mock_find_flats.return_value = []
+
+        find_flat_for_date(self.library_dir, self.light_metadata, "2024-01-10")
+
+        call_kwargs = mock_find_flats.call_args[1]
+        self.assertIn(
+            NORMALIZED_HEADER_DATE,
+            call_kwargs["match_fields"],
+            "find_flat_for_date must include date in match_fields",
+        )
+
+    @patch("ap_copy_master_to_blink.matching.find_flats_util")
+    def test_find_flat_for_date_does_not_modify_original_metadata(
+        self, mock_find_flats
+    ):
+        """Verify original light_metadata is not modified."""
+        mock_find_flats.return_value = []
+        original_date = self.light_metadata[NORMALIZED_HEADER_DATE]
+
+        find_flat_for_date(self.library_dir, self.light_metadata, "2024-01-10")
+
+        # Original metadata should be unchanged
+        self.assertEqual(self.light_metadata[NORMALIZED_HEADER_DATE], original_date)
 
 
 if __name__ == "__main__":

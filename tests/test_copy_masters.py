@@ -16,6 +16,7 @@ from ap_copy_master_to_blink.copy_masters import (
     copy_master_to_blink,
     check_masters_exist,
     process_blink_directory,
+    _sort_groups_by_date,
 )
 from ap_copy_master_to_blink.__main__ import (
     validate_directories,
@@ -1164,6 +1165,396 @@ class TestPrintSummary(unittest.TestCase):
         self.assertIn("Biases:", calibration_lines[0])
         self.assertIn("Darks:", calibration_lines[1])
         self.assertIn("Flats:", calibration_lines[2])
+
+
+class TestSortGroupsByDate(unittest.TestCase):
+    """Tests for _sort_groups_by_date function."""
+
+    def test_sort_ascending(self):
+        """Groups are sorted by date ascending (oldest first)."""
+        groups = {
+            ("cam", "100", "50", "-10", "0", "300", "Ha", "2024-03-01"): [
+                {"metadata": "march"}
+            ],
+            ("cam", "100", "50", "-10", "0", "300", "Ha", "2024-01-01"): [
+                {"metadata": "jan"}
+            ],
+            ("cam", "100", "50", "-10", "0", "300", "Ha", "2024-02-01"): [
+                {"metadata": "feb"}
+            ],
+        }
+
+        sorted_groups = _sort_groups_by_date(groups)
+        dates = [item[0][7] for item in sorted_groups]
+
+        self.assertEqual(dates, ["2024-01-01", "2024-02-01", "2024-03-01"])
+
+    def test_sort_with_none_date(self):
+        """Groups with None date sort before dated groups."""
+        groups = {
+            ("cam", "100", "50", "-10", "0", "300", "Ha", "2024-01-01"): [
+                {"metadata": "jan"}
+            ],
+            ("cam", "100", "50", "-10", "0", "300", "Ha", None): [{"metadata": "none"}],
+        }
+
+        sorted_groups = _sort_groups_by_date(groups)
+        dates = [item[0][7] for item in sorted_groups]
+
+        # None sorts as "" which comes before any date string
+        self.assertEqual(dates, [None, "2024-01-01"])
+
+    def test_sort_preserves_all_groups(self):
+        """All groups are preserved after sorting."""
+        groups = {
+            ("cam", "100", "50", "-10", "0", "300", "Ha", "2024-01-01"): [{"m": "1"}],
+            ("cam", "100", "50", "-10", "0", "300", "OIII", "2024-01-01"): [{"m": "2"}],
+        }
+
+        sorted_groups = _sort_groups_by_date(groups)
+        self.assertEqual(len(sorted_groups), 2)
+
+
+class TestFlexibleFlatMatching(unittest.TestCase):
+    """Tests for flexible flat matching integration in process_blink_directory."""
+
+    @patch("ap_copy_master_to_blink.copy_masters.scan_blink_directories")
+    @patch("ap_copy_master_to_blink.copy_masters.determine_required_masters")
+    @patch("ap_copy_master_to_blink.copy_masters.check_masters_exist")
+    @patch("ap_copy_master_to_blink.copy_masters.copy_master_to_blink")
+    @patch("ap_copy_master_to_blink.copy_masters.find_candidate_flat_dates")
+    @patch("ap_copy_master_to_blink.copy_masters.pick_flat_date")
+    @patch("ap_copy_master_to_blink.copy_masters.find_flat_for_date")
+    @patch("ap_copy_master_to_blink.copy_masters.load_state")
+    @patch("ap_copy_master_to_blink.copy_masters.save_state")
+    def test_flexible_flat_fallback_user_selects_date(
+        self,
+        mock_save_state,
+        mock_load_state,
+        mock_find_flat_for_date,
+        mock_pick,
+        mock_candidates,
+        mock_copy,
+        mock_check,
+        mock_determine,
+        mock_scan,
+    ):
+        """When no exact flat, user selects from picker, flat is used."""
+        import tempfile
+        from datetime import date
+
+        light_metadata = {
+            NORMALIZED_HEADER_FILENAME: (
+                "/blink/M31/DATE_2024-01-15/FILTER_Ha/light.fits"
+            ),
+            NORMALIZED_HEADER_CAMERA: "ASI2600MM",
+            NORMALIZED_HEADER_GAIN: "100",
+            NORMALIZED_HEADER_OFFSET: "50",
+            NORMALIZED_HEADER_SETTEMP: "-10",
+            NORMALIZED_HEADER_READOUTMODE: "0",
+            NORMALIZED_HEADER_EXPOSURESECONDS: "300",
+            NORMALIZED_HEADER_FILTER: "Ha",
+            NORMALIZED_HEADER_DATE: "2024-01-15",
+        }
+
+        mock_scan.return_value = [light_metadata]
+        mock_load_state.return_value = {}
+
+        # No exact flat match
+        mock_determine.return_value = {
+            TYPE_MASTER_DARK: {
+                NORMALIZED_HEADER_FILENAME: "/lib/dark.xisf",
+                NORMALIZED_HEADER_EXPOSURESECONDS: "300",
+            },
+            TYPE_MASTER_BIAS: None,
+            TYPE_MASTER_FLAT: None,
+        }
+
+        # Candidate dates available
+        mock_candidates.return_value = {
+            "2024-01-10": {NORMALIZED_HEADER_FILENAME: "/lib/flat_10.xisf"},
+        }
+
+        # User picks older date
+        mock_pick.return_value = date(2024, 1, 10)
+
+        # Flat found for selected date
+        flat_for_date = {
+            NORMALIZED_HEADER_FILENAME: "/lib/flat_10.xisf",
+            NORMALIZED_HEADER_DATE: "2024-01-10",
+        }
+        mock_find_flat_for_date.return_value = flat_for_date
+
+        mock_check.return_value = {
+            "has_dark": False,
+            "has_bias": False,
+            "has_flat": False,
+        }
+        mock_copy.return_value = True
+
+        with tempfile.NamedTemporaryFile(suffix=".yaml") as f:
+            stats = process_blink_directory(
+                Path("/library"),
+                Path("/blink"),
+                dry_run=False,
+                flat_state_path=Path(f.name),
+            )
+
+        # Flat should have been found via fallback
+        self.assertEqual(stats["flats_present"], 1)
+        self.assertEqual(stats["flats_needed"], 1)
+
+    @patch("ap_copy_master_to_blink.copy_masters.scan_blink_directories")
+    @patch("ap_copy_master_to_blink.copy_masters.determine_required_masters")
+    @patch("ap_copy_master_to_blink.copy_masters.check_masters_exist")
+    @patch("ap_copy_master_to_blink.copy_masters.copy_master_to_blink")
+    @patch("ap_copy_master_to_blink.copy_masters.load_state")
+    @patch("ap_copy_master_to_blink.copy_masters.save_state")
+    def test_exact_match_updates_state_cutoff(
+        self,
+        mock_save_state,
+        mock_load_state,
+        mock_copy,
+        mock_check,
+        mock_determine,
+        mock_scan,
+    ):
+        """Exact flat match updates the state cutoff."""
+        import tempfile
+
+        light_metadata = {
+            NORMALIZED_HEADER_FILENAME: (
+                "/blink/M31/DATE_2024-01-15/FILTER_Ha/light.fits"
+            ),
+            NORMALIZED_HEADER_CAMERA: "ASI2600MM",
+            NORMALIZED_HEADER_GAIN: "100",
+            NORMALIZED_HEADER_OFFSET: "50",
+            NORMALIZED_HEADER_SETTEMP: "-10",
+            NORMALIZED_HEADER_READOUTMODE: "0",
+            NORMALIZED_HEADER_EXPOSURESECONDS: "300",
+            NORMALIZED_HEADER_FILTER: "Ha",
+            NORMALIZED_HEADER_DATE: "2024-01-15",
+        }
+
+        mock_scan.return_value = [light_metadata]
+        state = {}
+        mock_load_state.return_value = state
+
+        # Exact flat match found
+        mock_determine.return_value = {
+            TYPE_MASTER_DARK: {
+                NORMALIZED_HEADER_FILENAME: "/lib/dark.xisf",
+                NORMALIZED_HEADER_EXPOSURESECONDS: "300",
+            },
+            TYPE_MASTER_BIAS: None,
+            TYPE_MASTER_FLAT: {NORMALIZED_HEADER_FILENAME: "/lib/flat.xisf"},
+        }
+
+        mock_check.return_value = {
+            "has_dark": False,
+            "has_bias": False,
+            "has_flat": False,
+        }
+        mock_copy.return_value = True
+
+        with tempfile.NamedTemporaryFile(suffix=".yaml") as f:
+            process_blink_directory(
+                Path("/library"),
+                Path("/blink"),
+                dry_run=False,
+                flat_state_path=Path(f.name),
+            )
+
+        # State should have been saved
+        mock_save_state.assert_called_once()
+        # State should include the blink dir with cutoff
+        saved_state = mock_save_state.call_args[0][1]
+        self.assertIn(str(Path("/blink")), saved_state)
+
+    @patch("ap_copy_master_to_blink.copy_masters.scan_blink_directories")
+    @patch("ap_copy_master_to_blink.copy_masters.determine_required_masters")
+    @patch("ap_copy_master_to_blink.copy_masters.check_masters_exist")
+    @patch("ap_copy_master_to_blink.copy_masters.copy_master_to_blink")
+    @patch("ap_copy_master_to_blink.copy_masters.load_state")
+    @patch("ap_copy_master_to_blink.copy_masters.save_state")
+    def test_dry_run_does_not_save_state(
+        self,
+        mock_save_state,
+        mock_load_state,
+        mock_copy,
+        mock_check,
+        mock_determine,
+        mock_scan,
+    ):
+        """Dry run does not save the state file."""
+        import tempfile
+
+        light_metadata = {
+            NORMALIZED_HEADER_FILENAME: (
+                "/blink/M31/DATE_2024-01-15/FILTER_Ha/light.fits"
+            ),
+            NORMALIZED_HEADER_CAMERA: "ASI2600MM",
+            NORMALIZED_HEADER_GAIN: "100",
+            NORMALIZED_HEADER_OFFSET: "50",
+            NORMALIZED_HEADER_SETTEMP: "-10",
+            NORMALIZED_HEADER_READOUTMODE: "0",
+            NORMALIZED_HEADER_EXPOSURESECONDS: "300",
+            NORMALIZED_HEADER_FILTER: "Ha",
+            NORMALIZED_HEADER_DATE: "2024-01-15",
+        }
+
+        mock_scan.return_value = [light_metadata]
+        mock_load_state.return_value = {}
+
+        mock_determine.return_value = {
+            TYPE_MASTER_DARK: {
+                NORMALIZED_HEADER_FILENAME: "/lib/dark.xisf",
+                NORMALIZED_HEADER_EXPOSURESECONDS: "300",
+            },
+            TYPE_MASTER_BIAS: None,
+            TYPE_MASTER_FLAT: {NORMALIZED_HEADER_FILENAME: "/lib/flat.xisf"},
+        }
+
+        mock_check.return_value = {
+            "has_dark": False,
+            "has_bias": False,
+            "has_flat": False,
+        }
+        mock_copy.return_value = True
+
+        with tempfile.NamedTemporaryFile(suffix=".yaml") as f:
+            process_blink_directory(
+                Path("/library"),
+                Path("/blink"),
+                dry_run=True,
+                flat_state_path=Path(f.name),
+            )
+
+        # State should NOT have been saved during dry run
+        mock_save_state.assert_not_called()
+
+    @patch("ap_copy_master_to_blink.copy_masters.scan_blink_directories")
+    @patch("ap_copy_master_to_blink.copy_masters.determine_required_masters")
+    @patch("ap_copy_master_to_blink.copy_masters.check_masters_exist")
+    @patch("ap_copy_master_to_blink.copy_masters.copy_master_to_blink")
+    def test_no_flat_state_path_skips_flexible_matching(
+        self,
+        mock_copy,
+        mock_check,
+        mock_determine,
+        mock_scan,
+    ):
+        """Without --flat-state, no flexible matching occurs."""
+        light_metadata = {
+            NORMALIZED_HEADER_FILENAME: (
+                "/blink/M31/DATE_2024-01-15/FILTER_Ha/light.fits"
+            ),
+            NORMALIZED_HEADER_CAMERA: "ASI2600MM",
+            NORMALIZED_HEADER_GAIN: "100",
+            NORMALIZED_HEADER_OFFSET: "50",
+            NORMALIZED_HEADER_SETTEMP: "-10",
+            NORMALIZED_HEADER_READOUTMODE: "0",
+            NORMALIZED_HEADER_EXPOSURESECONDS: "300",
+            NORMALIZED_HEADER_FILTER: "Ha",
+            NORMALIZED_HEADER_DATE: "2024-01-15",
+        }
+
+        mock_scan.return_value = [light_metadata]
+
+        # No flat match
+        mock_determine.return_value = {
+            TYPE_MASTER_DARK: {
+                NORMALIZED_HEADER_FILENAME: "/lib/dark.xisf",
+                NORMALIZED_HEADER_EXPOSURESECONDS: "300",
+            },
+            TYPE_MASTER_BIAS: None,
+            TYPE_MASTER_FLAT: None,
+        }
+
+        mock_check.return_value = {
+            "has_dark": False,
+            "has_bias": False,
+            "has_flat": False,
+        }
+        mock_copy.return_value = True
+
+        # No flat_state_path - should not trigger flexible matching
+        stats = process_blink_directory(
+            Path("/library"),
+            Path("/blink"),
+            dry_run=False,
+        )
+
+        # Flat should be missing
+        self.assertEqual(stats["flats_present"], 0)
+        self.assertEqual(stats["flats_needed"], 1)
+
+    @patch("ap_copy_master_to_blink.copy_masters.scan_blink_directories")
+    @patch("ap_copy_master_to_blink.copy_masters.determine_required_masters")
+    @patch("ap_copy_master_to_blink.copy_masters.check_masters_exist")
+    @patch("ap_copy_master_to_blink.copy_masters.copy_master_to_blink")
+    @patch("ap_copy_master_to_blink.copy_masters.find_candidate_flat_dates")
+    @patch("ap_copy_master_to_blink.copy_masters.load_state")
+    @patch("ap_copy_master_to_blink.copy_masters.save_state")
+    def test_quiet_mode_skips_picker(
+        self,
+        mock_save_state,
+        mock_load_state,
+        mock_candidates,
+        mock_copy,
+        mock_check,
+        mock_determine,
+        mock_scan,
+    ):
+        """Quiet mode skips interactive picker, treats as missing."""
+        import tempfile
+
+        light_metadata = {
+            NORMALIZED_HEADER_FILENAME: (
+                "/blink/M31/DATE_2024-01-15/FILTER_Ha/light.fits"
+            ),
+            NORMALIZED_HEADER_CAMERA: "ASI2600MM",
+            NORMALIZED_HEADER_GAIN: "100",
+            NORMALIZED_HEADER_OFFSET: "50",
+            NORMALIZED_HEADER_SETTEMP: "-10",
+            NORMALIZED_HEADER_READOUTMODE: "0",
+            NORMALIZED_HEADER_EXPOSURESECONDS: "300",
+            NORMALIZED_HEADER_FILTER: "Ha",
+            NORMALIZED_HEADER_DATE: "2024-01-15",
+        }
+
+        mock_scan.return_value = [light_metadata]
+        mock_load_state.return_value = {}
+
+        mock_determine.return_value = {
+            TYPE_MASTER_DARK: {
+                NORMALIZED_HEADER_FILENAME: "/lib/dark.xisf",
+                NORMALIZED_HEADER_EXPOSURESECONDS: "300",
+            },
+            TYPE_MASTER_BIAS: None,
+            TYPE_MASTER_FLAT: None,
+        }
+
+        mock_check.return_value = {
+            "has_dark": False,
+            "has_bias": False,
+            "has_flat": False,
+        }
+        mock_copy.return_value = True
+
+        with tempfile.NamedTemporaryFile(suffix=".yaml") as f:
+            stats = process_blink_directory(
+                Path("/library"),
+                Path("/blink"),
+                dry_run=False,
+                quiet=True,
+                flat_state_path=Path(f.name),
+            )
+
+        # Should NOT have called find_candidate_flat_dates in quiet mode
+        mock_candidates.assert_not_called()
+        # Flat should be missing
+        self.assertEqual(stats["flats_present"], 0)
 
 
 if __name__ == "__main__":

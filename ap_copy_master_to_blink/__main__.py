@@ -172,6 +172,25 @@ Examples:
         "Default: exact exposure match only",
     )
 
+    parser.add_argument(
+        "--flat-state",
+        type=str,
+        default=None,
+        metavar="PATH",
+        help="Path to flat state YAML file. Enables flexible flat date "
+        "matching with interactive selection when no exact date match "
+        "exists. Without this option, only exact date matches are used.",
+    )
+
+    parser.add_argument(
+        "--picker-limit",
+        type=int,
+        default=5,
+        metavar="N",
+        help="Max older/newer flat dates to show in interactive picker "
+        "(default: 5). Only used with --flat-state.",
+    )
+
     args = parser.parse_args()
 
     # Setup logging
@@ -192,13 +211,20 @@ Examples:
     if not args.quiet:
         print_header(library_dir, blink_dir, args.dryrun)
 
+    # Resolve flat state path
+    flat_state_path = None
+    if args.flat_state:
+        flat_state_path = Path(resolve_path(replace_env_vars(args.flat_state)))
+
     # Process blink directory
     stats = process_blink_directory(
         library_dir,
         blink_dir,
         dry_run=args.dryrun,
         quiet=args.quiet,
-        scale_darks=args.scale_darks,
+        scale_darks=args.scale_dark,
+        flat_state_path=flat_state_path,
+        picker_limit=args.picker_limit,
     )
 
     # Print summary

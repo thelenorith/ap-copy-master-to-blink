@@ -185,15 +185,8 @@ def find_matching_flat(
     """
     Find matching flat frame for a light frame.
 
-    DATE must match exactly.
-
-    TODO: Support selecting older flats when exact date match not found
-    This would scan DATE subdirectories < light frame date and pick the most recent
-
-    TODO: Support selecting newer flats when exact date match not found
-    This would scan DATE subdirectories > light frame date and pick the oldest
-
-    TODO: Add configuration option for flat date tolerance (e.g., ±7 days)
+    DATE must match exactly. For flexible date matching, see
+    find_candidate_flat_dates() and the --flat-state CLI option.
 
     Args:
         library_dir: Path to calibration library
@@ -241,6 +234,120 @@ def find_matching_flat(
         f"(date={light_metadata.get(NORMALIZED_HEADER_DATE)}, "
         f"filter={light_metadata.get(NORMALIZED_HEADER_FILTER)})"
     )
+    return None
+
+
+def find_candidate_flat_dates(
+    library_dir: Path,
+    light_metadata: Dict[str, str],
+    cutoff_date: Optional[str] = None,
+) -> Dict[str, Dict[str, str]]:
+    """
+    Find all candidate flat dates matching equipment criteria (ignoring date).
+
+    Searches the library for flats matching camera, optic, filter, gain,
+    offset, settemp, readoutmode, focallen - but NOT date. Returns a dict
+    mapping date string to the flat metadata for that date.
+
+    Args:
+        library_dir: Path to calibration library
+        light_metadata: Metadata dictionary for light frame
+        cutoff_date: If set, exclude flats older than this date (YYYY-MM-DD)
+
+    Returns:
+        Dictionary mapping date string (YYYY-MM-DD) to flat metadata dict.
+        Only includes dates >= cutoff_date if cutoff is set.
+    """
+    # Search without date constraint
+    matches = find_flats_util(
+        library_dir,
+        light_metadata,
+        match_fields=[
+            NORMALIZED_HEADER_CAMERA,
+            NORMALIZED_HEADER_OPTIC,
+            NORMALIZED_HEADER_FILTER,
+            NORMALIZED_HEADER_GAIN,
+            NORMALIZED_HEADER_OFFSET,
+            NORMALIZED_HEADER_SETTEMP,
+            NORMALIZED_HEADER_READOUTMODE,
+            NORMALIZED_HEADER_FOCALLEN,
+            # NOTE: date intentionally omitted for flexible matching
+        ],
+        recursive=True,
+        profileFromPath=False,  # Read file headers, not path structure
+        printStatus=False,  # No progress output for library search
+    )
+
+    if not matches:
+        logger.debug("No candidate flats found in library")
+        return {}
+
+    # Group by date, keeping first match per date
+    by_date: Dict[str, Dict[str, str]] = {}
+    for flat in matches:
+        flat_date = flat.get(NORMALIZED_HEADER_DATE)
+        if not flat_date:
+            continue
+        if flat_date not in by_date:
+            by_date[flat_date] = flat
+
+    # Filter by cutoff
+    if cutoff_date:
+        by_date = {d: m for d, m in by_date.items() if d >= cutoff_date}
+
+    logger.debug(
+        f"Found {len(by_date)} candidate flat dates " f"(cutoff={cutoff_date})"
+    )
+    return by_date
+
+
+def find_flat_for_date(
+    library_dir: Path,
+    light_metadata: Dict[str, str],
+    target_date: str,
+) -> Optional[Dict[str, str]]:
+    """
+    Find a matching flat frame for a specific date.
+
+    Like find_matching_flat, but uses the specified date instead of the
+    light frame's date.
+
+    Args:
+        library_dir: Path to calibration library
+        light_metadata: Metadata dictionary for light frame
+        target_date: Date to search for (YYYY-MM-DD)
+
+    Returns:
+        Metadata dict for matching flat, or None if no match found
+    """
+    # Create modified metadata with target date
+    search_metadata = dict(light_metadata)
+    search_metadata[NORMALIZED_HEADER_DATE] = target_date
+
+    matches = find_flats_util(
+        library_dir,
+        search_metadata,
+        match_fields=[
+            NORMALIZED_HEADER_CAMERA,
+            NORMALIZED_HEADER_OPTIC,
+            NORMALIZED_HEADER_FILTER,
+            NORMALIZED_HEADER_GAIN,
+            NORMALIZED_HEADER_OFFSET,
+            NORMALIZED_HEADER_SETTEMP,
+            NORMALIZED_HEADER_READOUTMODE,
+            NORMALIZED_HEADER_FOCALLEN,
+            NORMALIZED_HEADER_DATE,
+        ],
+        recursive=True,
+        profileFromPath=False,  # Read file headers, not path structure
+        printStatus=False,  # No progress output for library search
+    )
+
+    if matches:
+        logger.debug(f"Found flat for date {target_date}")
+        return matches[0]
+
+    logger.debug(f"No flat found for date {target_date}")
     return None
 
 
