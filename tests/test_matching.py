@@ -417,9 +417,7 @@ class TestLibraryProfileFromPath(unittest.TestCase):
         )
 
     @patch("ap_copy_master_to_blink.matching.find_flats_util")
-    def test_find_matching_flat_uses_profileFromPath_false(
-        self, mock_find_flats
-    ):
+    def test_find_matching_flat_uses_profileFromPath_false(self, mock_find_flats):
         """
         Verify find_matching_flat() passes
         profileFromPath=False to library search.

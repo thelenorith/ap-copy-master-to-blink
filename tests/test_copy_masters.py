@@ -397,8 +397,7 @@ class TestCopyMasters(unittest.TestCase):
         # Mock light metadata
         light_metadata = {
             NORMALIZED_HEADER_FILENAME: (
-                "/blink/M31/DATE_2024-01-15"
-                "/FILTER_Ha/light.fits"
+                "/blink/M31/DATE_2024-01-15" "/FILTER_Ha/light.fits"
             ),
             NORMALIZED_HEADER_CAMERA: "ASI2600MM",
             NORMALIZED_HEADER_GAIN: "100",
@@ -434,9 +433,7 @@ class TestCopyMasters(unittest.TestCase):
         # Mock successful copy
         mock_copy.return_value = True
 
-        stats = process_blink_directory(
-            Path("/library"), Path("/blink"), dry_run=False
-        )
+        stats = process_blink_directory(Path("/library"), Path("/blink"), dry_run=False)
 
         self.assertEqual(stats["frame_count"], 1)
         self.assertEqual(stats["target_count"], 1)
@@ -469,8 +466,7 @@ class TestCopyMasters(unittest.TestCase):
         # Mock light metadata
         light_metadata = {
             NORMALIZED_HEADER_FILENAME: (
-                "/blink/M31/DATE_2024-01-15"
-                "/FILTER_Ha/light.fits"
+                "/blink/M31/DATE_2024-01-15" "/FILTER_Ha/light.fits"
             ),
             NORMALIZED_HEADER_CAMERA: "ASI2600MM",
             NORMALIZED_HEADER_GAIN: "100",
@@ -533,8 +529,7 @@ class TestCopyMasters(unittest.TestCase):
         # Mock light metadata
         light_metadata = {
             NORMALIZED_HEADER_FILENAME: (
-                "/blink/M31/DATE_2024-01-15"
-                "/FILTER_Ha/light.fits"
+                "/blink/M31/DATE_2024-01-15" "/FILTER_Ha/light.fits"
             ),
             NORMALIZED_HEADER_CAMERA: "ASI2600MM",
             NORMALIZED_HEADER_GAIN: "100",
@@ -759,8 +754,7 @@ class TestIntegrationOld(unittest.TestCase):
                 NORMALIZED_HEADER_FILTER: "H",
                 NORMALIZED_HEADER_DATE: "2026-02-07",
                 NORMALIZED_HEADER_FILENAME: (
-                    "/blink/Target1/DATE_2026-02-07"
-                    "/FILTER_H/light1.xisf"
+                    "/blink/Target1/DATE_2026-02-07" "/FILTER_H/light1.xisf"
                 ),
             },
             {
@@ -773,8 +767,7 @@ class TestIntegrationOld(unittest.TestCase):
                 NORMALIZED_HEADER_FILTER: "H",
                 NORMALIZED_HEADER_DATE: "2026-02-07",
                 NORMALIZED_HEADER_FILENAME: (
-                    "/blink/Target2/DATE_2026-02-07"
-                    "/FILTER_H/light2.xisf"
+                    "/blink/Target2/DATE_2026-02-07" "/FILTER_H/light2.xisf"
                 ),
             },
         ]
@@ -1133,7 +1126,8 @@ class TestPrintSummary(unittest.TestCase):
             "Biases:", output, "Bias line must be present even when all missing"
         )
         self.assertIn(
-            "0 of 10", output,
+            "0 of 10",
+            output,
             "Should show 0 of 10 when all biases missing",
         )
 
