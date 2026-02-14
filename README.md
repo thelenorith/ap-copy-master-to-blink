@@ -4,6 +4,7 @@
 [![Coverage](https://github.com/jewzaam/ap-copy-master-to-blink/actions/workflows/coverage.yml/badge.svg)](https://github.com/jewzaam/ap-copy-master-to-blink/actions/workflows/coverage.yml)
 [![Lint](https://github.com/jewzaam/ap-copy-master-to-blink/actions/workflows/lint.yml/badge.svg)](https://github.com/jewzaam/ap-copy-master-to-blink/actions/workflows/lint.yml)
 [![Format](https://github.com/jewzaam/ap-copy-master-to-blink/actions/workflows/format.yml/badge.svg)](https://github.com/jewzaam/ap-copy-master-to-blink/actions/workflows/format.yml)
+[![Type Check](https://github.com/jewzaam/ap-copy-master-to-blink/actions/workflows/typecheck.yml/badge.svg)](https://github.com/jewzaam/ap-copy-master-to-blink/actions/workflows/typecheck.yml)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/downloads/)
 [![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
 
@@ -43,12 +44,12 @@ Library searches read **actual FITS headers** from calibration files, not path s
 Priority matching (in order):
 
 1. **Exact exposure match**: Same camera, gain, offset, settemp, readoutmode, and exposure time
-2. **Shorter exposure + bias** (requires `--allow-bias`): If no exact match, find the longest dark exposure < light exposure
+2. **Shorter exposure + bias** (requires `--scale-dark`): If no exact match, find the longest dark exposure < light exposure
    - **Requires matching bias**: Will not use shorter dark without bias
-   - **Default behavior**: Without `--allow-bias`, only exact exposure match darks are copied
-3. **No match**: If no exact dark and no bias (or `--allow-bias` not specified), skip (logged as missing)
+   - **Default behavior**: Without `--scale-dark`, only exact exposure match darks are copied
+3. **No match**: If no exact dark and no bias (or `--scale-dark` not specified), skip (logged as missing)
 
-**Note**: By default, only exact exposure match darks are copied. Use `--allow-bias` to enable shorter dark + bias frame matching.
+**Note**: By default, only exact exposure match darks are copied. Use `--scale-dark` to enable shorter dark + bias frame matching.
 
 ### Flat Frames
 
@@ -92,8 +93,8 @@ python -m ap_copy_master_to_blink <library_dir> <blink_dir> --debug
 # With quiet mode (minimal output)
 python -m ap_copy_master_to_blink <library_dir> <blink_dir> --quiet
 
-# Allow shorter darks with bias frames
-python -m ap_copy_master_to_blink <library_dir> <blink_dir> --allow-bias
+# Enable bias-compensated dark scaling (allows shorter dark exposures)
+python -m ap_copy_master_to_blink <library_dir> <blink_dir> --scale-dark
 
 # Real example
 python -m ap_copy_master_to_blink \
@@ -108,7 +109,7 @@ python -m ap_copy_master_to_blink \
 - `--dryrun`: Show what would be copied without actually copying files
 - `--debug`: Enable debug logging
 - `--quiet`, `-q`: Suppress progress output
-- `--allow-bias`: Allow shorter darks with bias frames (default: only exact exposure match darks)
+- `--scale-dark`: Scale dark frames using bias compensation (allows shorter exposures). Default: exact exposure match only
 
 ## Directory Structure
 

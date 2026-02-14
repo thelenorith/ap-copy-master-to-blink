@@ -83,7 +83,7 @@ class TestMatching(unittest.TestCase):
         ]
 
         result = find_matching_dark(
-            self.library_dir, self.light_metadata, allow_bias=True
+            self.library_dir, self.light_metadata, scale_darks=True
         )
 
         self.assertIsNotNone(result)

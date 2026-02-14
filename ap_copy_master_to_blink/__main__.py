@@ -165,10 +165,11 @@ Examples:
     )
 
     parser.add_argument(
-        "--allow-bias",
-        action="store_true",
-        help="Allow shorter darks with bias frames. "
-        "Default: only exact exposure match darks are copied.",
+        "--scale-dark",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+        help="scale dark frames using bias compensation (allows shorter exposures). "
+        "Default: exact exposure match only",
     )
 
     args = parser.parse_args()
@@ -197,7 +198,7 @@ Examples:
         blink_dir,
         dry_run=args.dryrun,
         quiet=args.quiet,
-        allow_bias=args.allow_bias,
+        scale_darks=args.scale_darks,
     )
 
     # Print summary

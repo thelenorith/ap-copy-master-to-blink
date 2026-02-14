@@ -231,7 +231,7 @@ def process_blink_directory(
     blink_dir: Path,
     dry_run: bool = False,
     quiet: bool = False,
-    allow_bias: bool = False,
+    scale_darks: bool = False,
 ) -> Dict[str, int]:
     """
     Main orchestration logic to copy masters to blink directories.
@@ -241,8 +241,8 @@ def process_blink_directory(
         blink_dir: Path to blink directory tree
         dry_run: If True, log actions but don't copy files
         quiet: Suppress progress output
-        allow_bias: If False, only exact exposure match darks are copied.
-                   If True, shorter exposure darks with bias are allowed.
+        scale_darks: If False, only exact exposure match darks are copied.
+                    If True, shorter exposure darks with bias are allowed.
 
     Returns:
         Dictionary with summary statistics:
@@ -340,7 +340,7 @@ def process_blink_directory(
 
         # Find required masters
         masters = determine_required_masters(
-            library_dir, light_metadata, allow_bias=allow_bias
+            library_dir, light_metadata, scale_darks=scale_darks
         )
         dark = masters[TYPE_MASTER_DARK]
         bias = masters[TYPE_MASTER_BIAS]
