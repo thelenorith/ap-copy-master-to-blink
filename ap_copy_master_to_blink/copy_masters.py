@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Dict, List, Set, Tuple
 import logging
 
-from ap_common import get_metadata, get_filtered_metadata, copy_file
+from ap_common import get_filtered_metadata, copy_file
 from ap_common.progress import progress_iter, ProgressTracker
 from ap_common.constants import (
     NORMALIZED_HEADER_CAMERA,
@@ -104,7 +104,8 @@ def scan_blink_directories(
         logger.warning(f"No light frames found in {blink_dir}")
         return []
 
-    # Convert metadata dict to list of dicts (get_filtered_metadata returns {filename: metadata})
+    # Convert metadata dict to list of dicts
+    # (get_filtered_metadata returns {filename: metadata})
     metadata_list = list(metadata.values())
 
     logger.debug(f"Found {len(metadata_list)} light frames")
@@ -410,15 +411,18 @@ def process_blink_directory(
         # Collect missing master warnings (print after progress bar)
         # Only warn if not found in library AND not already present in any date_dir
         if not dark and not any_dark_present:
+            exp = light_metadata.get(NORMALIZED_HEADER_EXPOSURESECONDS)
             warnings.append(
-                f"Missing dark for exposure={light_metadata.get(NORMALIZED_HEADER_EXPOSURESECONDS)}s "
+                f"Missing dark for exposure={exp}s "
                 f"(run with --debug for search details)"
             )
 
         if not flat and not any_flat_present:
+            filt = light_metadata.get(NORMALIZED_HEADER_FILTER)
+            date = light_metadata.get(NORMALIZED_HEADER_DATE)
             warnings.append(
-                f"Missing flat for filter={light_metadata.get(NORMALIZED_HEADER_FILTER)}, "
-                f"date={light_metadata.get(NORMALIZED_HEADER_DATE)} "
+                f"Missing flat for filter={filt}, "
+                f"date={date} "
                 f"(run with --debug for search details)"
             )
 

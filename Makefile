@@ -29,7 +29,7 @@ format-check: install-dev
 	$(PYTHON) -m black --check ap_copy_master_to_blink tests
 
 lint: install-dev
-	$(PYTHON) -m flake8 --max-line-length=88 --extend-ignore=E203,W503,E501,F401 ap_copy_master_to_blink tests
+	$(PYTHON) -m flake8 --max-line-length=88 --extend-ignore=E203,W503 ap_copy_master_to_blink tests
 
 typecheck: install-dev
 	$(PYTHON) -m mypy ap_copy_master_to_blink

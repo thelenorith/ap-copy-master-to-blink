@@ -63,13 +63,17 @@ Priority matching (in order):
 
 ## Installation
 
+### From Git
+
 ```bash
-# From source
+pip install git+https://github.com/jewzaam/ap-copy-master-to-blink.git
+```
+
+### Development
+
+```bash
 git clone https://github.com/jewzaam/ap-copy-master-to-blink.git
 cd ap-copy-master-to-blink
-make install
-
-# Development installation
 make install-dev
 ```
 

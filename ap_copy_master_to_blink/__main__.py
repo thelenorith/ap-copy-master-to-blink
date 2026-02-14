@@ -13,6 +13,9 @@ from ap_common import setup_logging, replace_env_vars, resolve_path
 
 from .copy_masters import process_blink_directory
 
+EXIT_SUCCESS = 0
+EXIT_ERROR = 1
+
 
 def validate_directories(
     library_dir: Path, blink_dir: Path
@@ -182,7 +185,7 @@ Examples:
     is_valid, error_message = validate_directories(library_dir, blink_dir)
     if not is_valid:
         print(f"Error: {error_message}", file=sys.stderr)
-        return 1
+        return EXIT_ERROR
 
     # Print header
     if not args.quiet:
@@ -210,9 +213,9 @@ Examples:
             print(
                 "Warning: Some master frames are missing. Check logs above for details."
             )
-        return 1
+        return EXIT_ERROR
 
-    return 0
+    return EXIT_SUCCESS
 
 
 if __name__ == "__main__":

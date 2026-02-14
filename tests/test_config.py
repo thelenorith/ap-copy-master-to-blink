@@ -18,8 +18,6 @@ from ap_common.constants import (
     NORMALIZED_HEADER_EXPOSURESECONDS,
     NORMALIZED_HEADER_DATE,
     NORMALIZED_HEADER_FILTER,
-    NORMALIZED_HEADER_OPTIC,
-    NORMALIZED_HEADER_FOCALLEN,
 )
 from ap_copy_master_to_blink.config import (
     SUPPORTED_EXTENSIONS,
