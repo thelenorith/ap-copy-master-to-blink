@@ -39,15 +39,17 @@ Tests for isolated functions with mocked dependencies.
 | `picker.py` | `_day_diff_label()` | Older singular/plural, newer singular/plural, same day | Pure logic |
 | `picker.py` | `build_picker_items()` | Both older/newer, limit truncation, empty, overflow messages | Pure logic |
 | `picker.py` | `pick_flat_date()` | No candidates, user selects none/older/newer, user cancels | Mocks `questionary.select` |
-| `copy_masters.py` | `get_date_directory()` | From FILTER dir, from DATE dir, search upward | Pure logic |
-| `copy_masters.py` | `scan_blink_directories()` | Returns metadata list | Mocks `get_filtered_metadata` |
-| `copy_masters.py` | `group_lights_by_config()` | Multiple groups, None filter normalization, multiple None values | Pure logic |
-| `copy_masters.py` | `copy_master_to_blink()` | New file, existing file, dry run | Mocks `copy_file` |
-| `copy_masters.py` | `check_masters_exist()` | No directory, no files, dark/flat/all/partial exists | Mocks `Path.exists` |
-| `copy_masters.py` | `_sort_groups_by_date()` | Ascending order, None date handling, preserves all groups | Pure logic |
-| `copy_masters.py` | `_collect_filters_by_date()` | Single/multiple dates and filters, None values, malformed keys | Pure logic |
-| `copy_masters.py` | `_find_candidate_dates_with_all_filters()` | Single/multiple filters, intersection, no common dates, cutoff | Mocks candidate search |
-| `copy_masters.py` | `_resolve_flat_for_date()` | Quiet mode, no candidates, user selection, rig changed, date split | Mocks picker and candidates |
+| `path_utils.py` | `get_date_directory()` | From FILTER dir, from DATE dir, search upward | Pure logic |
+| `scanning.py` | `scan_blink_directories()` | Returns metadata list | Mocks `get_filtered_metadata` |
+| `scanning.py` | `group_lights_by_config()` | Multiple groups, None filter normalization, multiple None values | Pure logic |
+| `scanning.py` | `sort_groups_by_date()` | Ascending order, None date handling, preserves all groups | Pure logic |
+| `scanning.py` | `collect_filters_by_date()` | Single/multiple dates and filters, None values, malformed keys | Pure logic |
+| `file_operations.py` | `copy_master_to_blink()` | New file, existing file, dry run | Mocks `copy_file` |
+| `file_operations.py` | `check_masters_exist()` | No directory, no files, dark/flat/all/partial exists | Mocks `Path.exists` |
+| `flat_batch_selection.py` | `find_candidate_dates_with_all_filters()` | Single/multiple filters, intersection, no common dates, cutoff | Mocks candidate search |
+| `flat_batch_selection.py` | `resolve_flat_for_date()` | Quiet mode, no candidates, user selection, rig changed, date split | Mocks picker and candidates |
+| `orchestration.py` | `process_blink_directory()` | Masters copied, state updates, dry run, quiet mode | End-to-end with mocks |
+| `statistics.py` | `create_statistics()` | Returns correct structure | Pure logic |
 | `__main__.py` | `validate_directories()` | Both valid, missing/not-dir for library and blink | Mocks `Path.exists`/`is_dir` |
 | `__main__.py` | `print_header()` | Output contains expected fields | Captures stdout |
 | `__main__.py` | `print_summary()` | Output format, bias/dark/flat order | Captures stdout |
