@@ -1,10 +1,10 @@
 """
-Tests for flat batch selection logic in copy_masters.py.
+Tests for flat batch selection logic.
 
 Covers the batch flat date selection functions:
-- _collect_filters_by_date
-- _find_candidate_dates_with_all_filters
-- _resolve_flat_for_date
+- collect_filters_by_date (scanning.py)
+- find_candidate_dates_with_all_filters (flat_batch_selection.py)
+- resolve_flat_for_date (flat_batch_selection.py)
 """
 
 import unittest
@@ -26,15 +26,17 @@ from ap_common.constants import (
     NORMALIZED_HEADER_FOCALLEN,
 )
 
-from ap_copy_master_to_blink.copy_masters import (
-    _collect_filters_by_date,
-    _find_candidate_dates_with_all_filters,
-    _resolve_flat_for_date,
+from ap_copy_master_to_blink.scanning import (
+    collect_filters_by_date,
+)
+from ap_copy_master_to_blink.flat_batch_selection import (
+    find_candidate_dates_with_all_filters,
+    resolve_flat_for_date,
 )
 
 
 class TestCollectFiltersByDate(unittest.TestCase):
-    """Tests for _collect_filters_by_date function."""
+    """Tests for collect_filters_by_date function."""
 
     def _make_config_key(self, filter_name, date_str):
         """Helper to build a config key tuple."""
@@ -55,7 +57,7 @@ class TestCollectFiltersByDate(unittest.TestCase):
             self._make_config_key("Ha", "2024-01-15"): [{"metadata": "light1"}],
         }
 
-        result = _collect_filters_by_date(groups)
+        result = collect_filters_by_date(groups)
 
         self.assertEqual(result, {"2024-01-15": {"Ha"}})
 
@@ -67,7 +69,7 @@ class TestCollectFiltersByDate(unittest.TestCase):
             self._make_config_key("SII", "2024-01-15"): [{"m": "3"}],
         }
 
-        result = _collect_filters_by_date(groups)
+        result = collect_filters_by_date(groups)
 
         self.assertEqual(result, {"2024-01-15": {"Ha", "OIII", "SII"}})
 
@@ -79,7 +81,7 @@ class TestCollectFiltersByDate(unittest.TestCase):
             self._make_config_key("Ha", "2024-01-20"): [{"m": "3"}],
         }
 
-        result = _collect_filters_by_date(groups)
+        result = collect_filters_by_date(groups)
 
         self.assertEqual(len(result), 2)
         self.assertEqual(result["2024-01-15"], {"Ha", "OIII"})
@@ -87,7 +89,7 @@ class TestCollectFiltersByDate(unittest.TestCase):
 
     def test_empty_groups(self):
         """Empty groups dict returns empty result."""
-        result = _collect_filters_by_date({})
+        result = collect_filters_by_date({})
         self.assertEqual(result, {})
 
     def test_skips_none_date(self):
@@ -96,7 +98,7 @@ class TestCollectFiltersByDate(unittest.TestCase):
             self._make_config_key("Ha", None): [{"m": "1"}],
         }
 
-        result = _collect_filters_by_date(groups)
+        result = collect_filters_by_date(groups)
 
         self.assertEqual(result, {})
 
@@ -106,7 +108,7 @@ class TestCollectFiltersByDate(unittest.TestCase):
             self._make_config_key(None, "2024-01-15"): [{"m": "1"}],
         }
 
-        result = _collect_filters_by_date(groups)
+        result = collect_filters_by_date(groups)
 
         self.assertEqual(result, {})
 
@@ -116,13 +118,13 @@ class TestCollectFiltersByDate(unittest.TestCase):
             ("cam", "100"): [{"m": "1"}],  # Only 2 elements instead of 8
         }
 
-        result = _collect_filters_by_date(groups)
+        result = collect_filters_by_date(groups)
 
         self.assertEqual(result, {})
 
 
 class TestFindCandidateDatesWithAllFilters(unittest.TestCase):
-    """Tests for _find_candidate_dates_with_all_filters function."""
+    """Tests for find_candidate_dates_with_all_filters function."""
 
     def setUp(self):
         """Set up test fixtures."""
@@ -142,13 +144,13 @@ class TestFindCandidateDatesWithAllFilters(unittest.TestCase):
 
     def test_empty_required_filters(self):
         """No required filters returns empty dict."""
-        result = _find_candidate_dates_with_all_filters(
+        result = find_candidate_dates_with_all_filters(
             self.library_dir, self.light_metadata, set(), None
         )
         self.assertEqual(result, {})
 
-    @patch("ap_copy_master_to_blink.copy_masters.find_candidate_flat_dates")
-    @patch("ap_copy_master_to_blink.copy_masters.find_flat_for_date")
+    @patch("ap_copy_master_to_blink.flat_batch_selection" ".find_candidate_flat_dates")
+    @patch("ap_copy_master_to_blink.flat_batch_selection" ".find_flat_for_date")
     def test_single_filter_returns_all_dates(self, mock_find_flat, mock_candidates):
         """Single filter returns all candidate dates."""
         mock_candidates.return_value = {
@@ -157,7 +159,7 @@ class TestFindCandidateDatesWithAllFilters(unittest.TestCase):
         }
         mock_find_flat.return_value = {NORMALIZED_HEADER_FILENAME: "/lib/flat.xisf"}
 
-        result = _find_candidate_dates_with_all_filters(
+        result = find_candidate_dates_with_all_filters(
             self.library_dir, self.light_metadata, {"Ha"}, None
         )
 
@@ -165,8 +167,8 @@ class TestFindCandidateDatesWithAllFilters(unittest.TestCase):
         self.assertIn("2024-01-10", result)
         self.assertIn("2024-01-20", result)
 
-    @patch("ap_copy_master_to_blink.copy_masters.find_candidate_flat_dates")
-    @patch("ap_copy_master_to_blink.copy_masters.find_flat_for_date")
+    @patch("ap_copy_master_to_blink.flat_batch_selection" ".find_candidate_flat_dates")
+    @patch("ap_copy_master_to_blink.flat_batch_selection" ".find_flat_for_date")
     def test_multiple_filters_intersects_dates(self, mock_find_flat, mock_candidates):
         """Multiple filters only return dates that have ALL filters."""
 
@@ -187,7 +189,7 @@ class TestFindCandidateDatesWithAllFilters(unittest.TestCase):
         mock_candidates.side_effect = mock_candidate_dates
         mock_find_flat.return_value = {NORMALIZED_HEADER_FILENAME: "/lib/flat.xisf"}
 
-        result = _find_candidate_dates_with_all_filters(
+        result = find_candidate_dates_with_all_filters(
             self.library_dir, self.light_metadata, {"Ha", "OIII"}, None
         )
 
@@ -196,7 +198,7 @@ class TestFindCandidateDatesWithAllFilters(unittest.TestCase):
         self.assertIn("2024-01-10", result)
         self.assertNotIn("2024-01-20", result)
 
-    @patch("ap_copy_master_to_blink.copy_masters.find_candidate_flat_dates")
+    @patch("ap_copy_master_to_blink.flat_batch_selection" ".find_candidate_flat_dates")
     def test_no_common_dates(self, mock_candidates):
         """No common dates across filters returns empty dict."""
 
@@ -214,19 +216,19 @@ class TestFindCandidateDatesWithAllFilters(unittest.TestCase):
 
         mock_candidates.side_effect = mock_candidate_dates
 
-        result = _find_candidate_dates_with_all_filters(
+        result = find_candidate_dates_with_all_filters(
             self.library_dir, self.light_metadata, {"Ha", "OIII"}, None
         )
 
         self.assertEqual(result, {})
 
-    @patch("ap_copy_master_to_blink.copy_masters.find_candidate_flat_dates")
-    @patch("ap_copy_master_to_blink.copy_masters.find_flat_for_date")
+    @patch("ap_copy_master_to_blink.flat_batch_selection" ".find_candidate_flat_dates")
+    @patch("ap_copy_master_to_blink.flat_batch_selection" ".find_flat_for_date")
     def test_cutoff_date_passed_through(self, mock_find_flat, mock_candidates):
         """Cutoff date is passed to find_candidate_flat_dates."""
         mock_candidates.return_value = {}
 
-        _find_candidate_dates_with_all_filters(
+        find_candidate_dates_with_all_filters(
             self.library_dir, self.light_metadata, {"Ha"}, "2024-01-05"
         )
 
@@ -234,13 +236,13 @@ class TestFindCandidateDatesWithAllFilters(unittest.TestCase):
         call_args = mock_candidates.call_args
         self.assertEqual(call_args[0][2], "2024-01-05")
 
-    @patch("ap_copy_master_to_blink.copy_masters.find_candidate_flat_dates")
-    @patch("ap_copy_master_to_blink.copy_masters.find_flat_for_date")
+    @patch("ap_copy_master_to_blink.flat_batch_selection" ".find_candidate_flat_dates")
+    @patch("ap_copy_master_to_blink.flat_batch_selection" ".find_flat_for_date")
     def test_modifies_filter_in_search_metadata(self, mock_find_flat, mock_candidates):
         """Each filter search uses modified metadata with that filter."""
         mock_candidates.return_value = {}
 
-        _find_candidate_dates_with_all_filters(
+        find_candidate_dates_with_all_filters(
             self.library_dir, self.light_metadata, {"G", "R"}, None
         )
 
@@ -257,7 +259,7 @@ class TestFindCandidateDatesWithAllFilters(unittest.TestCase):
 
 
 class TestResolveFlatForDate(unittest.TestCase):
-    """Tests for _resolve_flat_for_date function."""
+    """Tests for resolve_flat_for_date function."""
 
     def setUp(self):
         """Set up test fixtures."""
@@ -279,7 +281,7 @@ class TestResolveFlatForDate(unittest.TestCase):
 
     def test_quiet_mode_returns_none(self):
         """Quiet mode skips interactive selection."""
-        result = _resolve_flat_for_date(
+        result = resolve_flat_for_date(
             self.library_dir,
             self.light_metadata,
             "2024-01-15",
@@ -293,13 +295,14 @@ class TestResolveFlatForDate(unittest.TestCase):
         self.assertIsNone(result)
 
     @patch(
-        "ap_copy_master_to_blink.copy_masters._find_candidate_dates_with_all_filters"
+        "ap_copy_master_to_blink.flat_batch_selection"
+        ".find_candidate_dates_with_all_filters"
     )
     def test_no_candidates_returns_none(self, mock_find):
         """No candidate dates returns None."""
         mock_find.return_value = {}
 
-        result = _resolve_flat_for_date(
+        result = resolve_flat_for_date(
             self.library_dir,
             self.light_metadata,
             "2024-01-15",
@@ -313,9 +316,10 @@ class TestResolveFlatForDate(unittest.TestCase):
         self.assertIsNone(result)
 
     @patch(
-        "ap_copy_master_to_blink.copy_masters._find_candidate_dates_with_all_filters"
+        "ap_copy_master_to_blink.flat_batch_selection"
+        ".find_candidate_dates_with_all_filters"
     )
-    @patch("ap_copy_master_to_blink.copy_masters.pick_flat_date")
+    @patch("ap_copy_master_to_blink.flat_batch_selection.pick_flat_date")
     def test_user_selects_date(self, mock_pick, mock_find):
         """User selecting a date returns it and updates state."""
         mock_find.return_value = {
@@ -323,7 +327,7 @@ class TestResolveFlatForDate(unittest.TestCase):
         }
         mock_pick.return_value = date(2024, 1, 10)
 
-        result = _resolve_flat_for_date(
+        result = resolve_flat_for_date(
             self.library_dir,
             self.light_metadata,
             "2024-01-15",
@@ -339,9 +343,10 @@ class TestResolveFlatForDate(unittest.TestCase):
         self.assertEqual(self.state[self.blink_dir_str], "2024-01-10")
 
     @patch(
-        "ap_copy_master_to_blink.copy_masters._find_candidate_dates_with_all_filters"
+        "ap_copy_master_to_blink.flat_batch_selection"
+        ".find_candidate_dates_with_all_filters"
     )
-    @patch("ap_copy_master_to_blink.copy_masters.pick_flat_date")
+    @patch("ap_copy_master_to_blink.flat_batch_selection.pick_flat_date")
     def test_user_selects_rig_changed(self, mock_pick, mock_find):
         """User selecting 'rig changed' returns None and updates cutoff."""
         mock_find.return_value = {
@@ -349,7 +354,7 @@ class TestResolveFlatForDate(unittest.TestCase):
         }
         mock_pick.return_value = None  # User chose "rig changed"
 
-        result = _resolve_flat_for_date(
+        result = resolve_flat_for_date(
             self.library_dir,
             self.light_metadata,
             "2024-01-15",
@@ -365,7 +370,8 @@ class TestResolveFlatForDate(unittest.TestCase):
         self.assertEqual(self.state[self.blink_dir_str], "2024-01-15")
 
     @patch(
-        "ap_copy_master_to_blink.copy_masters._find_candidate_dates_with_all_filters"
+        "ap_copy_master_to_blink.flat_batch_selection"
+        ".find_candidate_dates_with_all_filters"
     )
     def test_exact_date_excluded_from_candidates(self, mock_find):
         """The exact light date is removed from candidates."""
@@ -374,7 +380,7 @@ class TestResolveFlatForDate(unittest.TestCase):
             "2024-01-15": {NORMALIZED_HEADER_FILENAME: "/lib/flat_15.xisf"},
         }
 
-        result = _resolve_flat_for_date(
+        result = resolve_flat_for_date(
             self.library_dir,
             self.light_metadata,
             "2024-01-15",
@@ -389,9 +395,10 @@ class TestResolveFlatForDate(unittest.TestCase):
         self.assertIsNone(result)
 
     @patch(
-        "ap_copy_master_to_blink.copy_masters._find_candidate_dates_with_all_filters"
+        "ap_copy_master_to_blink.flat_batch_selection"
+        ".find_candidate_dates_with_all_filters"
     )
-    @patch("ap_copy_master_to_blink.copy_masters.pick_flat_date")
+    @patch("ap_copy_master_to_blink.flat_batch_selection.pick_flat_date")
     def test_candidates_split_into_older_and_newer(self, mock_pick, mock_find):
         """Candidates are correctly split into older and newer lists."""
         mock_find.return_value = {
@@ -401,7 +408,7 @@ class TestResolveFlatForDate(unittest.TestCase):
         }
         mock_pick.return_value = date(2024, 1, 10)
 
-        _resolve_flat_for_date(
+        resolve_flat_for_date(
             self.library_dir,
             self.light_metadata,
             "2024-01-15",
@@ -422,9 +429,10 @@ class TestResolveFlatForDate(unittest.TestCase):
         self.assertEqual(newer_dates, [date(2024, 1, 20)])
 
     @patch(
-        "ap_copy_master_to_blink.copy_masters._find_candidate_dates_with_all_filters"
+        "ap_copy_master_to_blink.flat_batch_selection"
+        ".find_candidate_dates_with_all_filters"
     )
-    @patch("ap_copy_master_to_blink.copy_masters.pick_flat_date")
+    @patch("ap_copy_master_to_blink.flat_batch_selection.pick_flat_date")
     def test_picker_label_includes_all_filters(self, mock_pick, mock_find):
         """Picker is called with 'ALL (filter1, filter2)' label."""
         mock_find.return_value = {
@@ -432,7 +440,7 @@ class TestResolveFlatForDate(unittest.TestCase):
         }
         mock_pick.return_value = date(2024, 1, 10)
 
-        _resolve_flat_for_date(
+        resolve_flat_for_date(
             self.library_dir,
             self.light_metadata,
             "2024-01-15",
@@ -453,15 +461,15 @@ class TestResolveFlatForDate(unittest.TestCase):
     def test_invalid_light_date_returns_none(self):
         """Invalid light date string returns None."""
         mock_target = (
-            "ap_copy_master_to_blink.copy_masters"
-            "._find_candidate_dates_with_all_filters"
+            "ap_copy_master_to_blink.flat_batch_selection"
+            ".find_candidate_dates_with_all_filters"
         )
         with patch(mock_target) as mock_find:
             mock_find.return_value = {
                 "2024-01-10": {NORMALIZED_HEADER_FILENAME: "/lib/flat_10.xisf"},
             }
 
-            result = _resolve_flat_for_date(
+            result = resolve_flat_for_date(
                 self.library_dir,
                 self.light_metadata,
                 "not-a-date",
@@ -475,9 +483,10 @@ class TestResolveFlatForDate(unittest.TestCase):
             self.assertIsNone(result)
 
     @patch(
-        "ap_copy_master_to_blink.copy_masters._find_candidate_dates_with_all_filters"
+        "ap_copy_master_to_blink.flat_batch_selection"
+        ".find_candidate_dates_with_all_filters"
     )
-    @patch("ap_copy_master_to_blink.copy_masters.pick_flat_date")
+    @patch("ap_copy_master_to_blink.flat_batch_selection.pick_flat_date")
     def test_picker_limit_passed_through(self, mock_pick, mock_find):
         """Picker limit is passed through to pick_flat_date."""
         mock_find.return_value = {
@@ -485,7 +494,7 @@ class TestResolveFlatForDate(unittest.TestCase):
         }
         mock_pick.return_value = date(2024, 1, 10)
 
-        _resolve_flat_for_date(
+        resolve_flat_for_date(
             self.library_dir,
             self.light_metadata,
             "2024-01-15",
@@ -500,14 +509,15 @@ class TestResolveFlatForDate(unittest.TestCase):
         self.assertEqual(call_kwargs["picker_limit"], 10)
 
     @patch(
-        "ap_copy_master_to_blink.copy_masters._find_candidate_dates_with_all_filters"
+        "ap_copy_master_to_blink.flat_batch_selection"
+        ".find_candidate_dates_with_all_filters"
     )
     def test_state_cutoff_used_for_candidate_search(self, mock_find):
         """Existing state cutoff is passed to candidate search."""
         self.state[self.blink_dir_str] = "2024-01-05"
         mock_find.return_value = {}
 
-        _resolve_flat_for_date(
+        resolve_flat_for_date(
             self.library_dir,
             self.light_metadata,
             "2024-01-15",
