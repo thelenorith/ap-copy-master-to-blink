@@ -14,6 +14,8 @@ from ap_common.constants import (
     TYPE_MASTER_FLAT,
 )
 
+from ap_common.progress import progress_iter
+
 from .matching import (
     find_candidate_flat_dates,
     find_flat_for_date,
@@ -122,6 +124,12 @@ def resolve_flat_for_date(
     # Get cutoff from state
     cutoff = get_cutoff(state, blink_dir_str)
 
+    filter_names = ", ".join(sorted(required_filters))
+    logger.info(
+        f"No exact flat for date={light_date}, "
+        f"searching candidates: filters={filter_names}"
+    )
+
     # Find candidates with ALL filters
     candidates = find_candidate_dates_with_all_filters(
         library_dir, light_metadata, required_filters, cutoff
@@ -162,7 +170,6 @@ def resolve_flat_for_date(
         return None
 
     # Show interactive picker ONCE for this date
-    filter_names = ", ".join(sorted(required_filters))
     selected_date = pick_flat_date(
         light_date,
         f"ALL ({filter_names})",  # Show all filters in prompt
@@ -220,8 +227,17 @@ def pre_prompt_flat_selections(
         selected_flat_date is None if user chose "rig changed"
     """
     flat_selections: Dict[str, Optional[str]] = {}
+    sorted_dates = sorted(filters_by_date.keys())
 
-    for light_date in sorted(filters_by_date.keys()):
+    # Phase 1: Check which dates need flat selection (with progress)
+    dates_needing_selection: Dict[str, Tuple[Dict[str, str], Set[str]]] = {}
+
+    for light_date in progress_iter(
+        sorted_dates,
+        desc="Checking flats",
+        unit="dates",
+        enabled=not quiet,
+    ):
         filters_needed = filters_by_date[light_date]
 
         # Check if any group for this date needs flat selection
@@ -243,18 +259,27 @@ def pre_prompt_flat_selections(
                     needs_selection = True
                     break
 
-        # Prompt once for this date if needed
         if needs_selection and representative_light is not None:
-            selected_date = resolve_flat_for_date(
-                library_dir,
+            dates_needing_selection[light_date] = (
                 representative_light,
-                light_date,
                 filters_needed,
-                blink_dir_str,
-                state,
-                quiet,
-                picker_limit,
             )
-            flat_selections[light_date] = selected_date
+
+    # Phase 2: Resolve flat dates for dates without exact matches
+    for light_date, (
+        representative_light,
+        filters_needed,
+    ) in dates_needing_selection.items():
+        selected_date = resolve_flat_for_date(
+            library_dir,
+            representative_light,
+            light_date,
+            filters_needed,
+            blink_dir_str,
+            state,
+            quiet,
+            picker_limit,
+        )
+        flat_selections[light_date] = selected_date
 
     return flat_selections

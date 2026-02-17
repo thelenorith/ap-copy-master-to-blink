@@ -24,6 +24,7 @@ from ap_common.constants import (
     NORMALIZED_HEADER_FILENAME,
     NORMALIZED_HEADER_OPTIC,
     NORMALIZED_HEADER_FOCALLEN,
+    TYPE_MASTER_FLAT,
 )
 
 from ap_copy_master_to_blink.scanning import (
@@ -532,6 +533,213 @@ class TestResolveFlatForDate(unittest.TestCase):
         call_args = mock_find.call_args[0]
         cutoff = call_args[3]
         self.assertEqual(cutoff, "2024-01-05")
+
+
+class TestPrePromptProgressIndicator(unittest.TestCase):
+    """Tests for progress indicator in pre_prompt_flat_selections."""
+
+    def _make_config_key(self, filter_name, date_str):
+        """Helper to build a config key tuple."""
+        return (
+            "ASI2600MM",  # camera
+            "100",  # gain
+            "50",  # offset
+            "-10",  # settemp
+            "0",  # readoutmode
+            "300",  # exposure
+            filter_name,  # filter
+            date_str,  # date
+        )
+
+    @patch("ap_copy_master_to_blink.flat_batch_selection.progress_iter")
+    @patch("ap_copy_master_to_blink.flat_batch_selection.determine_required_masters")
+    def test_pre_prompt_uses_progress_iter(self, mock_determine, mock_progress):
+        """Progress indicator wraps date checking loop."""
+        from ap_copy_master_to_blink.flat_batch_selection import (
+            pre_prompt_flat_selections,
+        )
+
+        mock_determine.return_value = {TYPE_MASTER_FLAT: {"some": "flat"}}
+        mock_progress.side_effect = lambda items, **kwargs: iter(items)
+
+        groups = {self._make_config_key("Ha", "2024-01-15"): [{"m": "1"}]}
+        filters_by_date = {"2024-01-15": {"Ha"}}
+
+        pre_prompt_flat_selections(
+            Path("/lib"),
+            groups,
+            filters_by_date,
+            "/blink",
+            {},
+            False,
+            False,
+            5,
+        )
+
+        mock_progress.assert_called_once()
+        call_kwargs = mock_progress.call_args[1]
+        self.assertEqual(call_kwargs["desc"], "Checking flats")
+        self.assertEqual(call_kwargs["unit"], "dates")
+        self.assertTrue(call_kwargs["enabled"])
+
+    @patch("ap_copy_master_to_blink.flat_batch_selection.progress_iter")
+    @patch("ap_copy_master_to_blink.flat_batch_selection.determine_required_masters")
+    def test_pre_prompt_progress_disabled_when_quiet(
+        self, mock_determine, mock_progress
+    ):
+        """Progress indicator is disabled in quiet mode."""
+        from ap_copy_master_to_blink.flat_batch_selection import (
+            pre_prompt_flat_selections,
+        )
+
+        mock_determine.return_value = {TYPE_MASTER_FLAT: {"some": "flat"}}
+        mock_progress.side_effect = lambda items, **kwargs: iter(items)
+
+        groups = {self._make_config_key("Ha", "2024-01-15"): [{"m": "1"}]}
+        filters_by_date = {"2024-01-15": {"Ha"}}
+
+        pre_prompt_flat_selections(
+            Path("/lib"),
+            groups,
+            filters_by_date,
+            "/blink",
+            {},
+            True,  # quiet=True
+            False,
+            5,
+        )
+
+        call_kwargs = mock_progress.call_args[1]
+        self.assertFalse(call_kwargs["enabled"])
+
+    @patch("ap_copy_master_to_blink.flat_batch_selection.progress_iter")
+    @patch("ap_copy_master_to_blink.flat_batch_selection.determine_required_masters")
+    @patch("ap_copy_master_to_blink.flat_batch_selection.resolve_flat_for_date")
+    def test_pre_prompt_separates_check_and_prompt_phases(
+        self, mock_resolve, mock_determine, mock_progress
+    ):
+        """Check phase completes before prompt phase begins.
+
+        Verifies that progress_iter wraps only the checking phase and
+        resolve_flat_for_date is called separately for dates needing selection.
+        """
+        from ap_copy_master_to_blink.flat_batch_selection import (
+            pre_prompt_flat_selections,
+        )
+
+        mock_progress.side_effect = lambda items, **kwargs: iter(items)
+
+        # First date has no flat, second has flat
+        def determine_side_effect(lib, metadata, scale):
+            if metadata.get(NORMALIZED_HEADER_DATE) == "2024-01-15":
+                return {TYPE_MASTER_FLAT: None}
+            return {TYPE_MASTER_FLAT: {"some": "flat"}}
+
+        mock_determine.side_effect = determine_side_effect
+        mock_resolve.return_value = "2024-01-10"
+
+        groups = {
+            self._make_config_key("Ha", "2024-01-15"): [
+                {NORMALIZED_HEADER_DATE: "2024-01-15"}
+            ],
+            self._make_config_key("Ha", "2024-01-20"): [
+                {NORMALIZED_HEADER_DATE: "2024-01-20"}
+            ],
+        }
+        filters_by_date = {
+            "2024-01-15": {"Ha"},
+            "2024-01-20": {"Ha"},
+        }
+
+        result = pre_prompt_flat_selections(
+            Path("/lib"),
+            groups,
+            filters_by_date,
+            "/blink",
+            {},
+            False,
+            False,
+            5,
+        )
+
+        # Only the date without exact match should trigger resolve
+        mock_resolve.assert_called_once()
+        call_args = mock_resolve.call_args[0]
+        self.assertEqual(call_args[2], "2024-01-15")  # light_date
+
+        # Result should contain the selection for the date needing it
+        self.assertEqual(result["2024-01-15"], "2024-01-10")
+        # Date with exact match should not be in selections
+        self.assertNotIn("2024-01-20", result)
+
+
+class TestResolveFlatLogging(unittest.TestCase):
+    """Tests for INFO logging in resolve_flat_for_date."""
+
+    def setUp(self):
+        """Set up test fixtures."""
+        self.library_dir = Path("/test/library")
+        self.light_metadata = {
+            NORMALIZED_HEADER_CAMERA: "ASI2600MM",
+            NORMALIZED_HEADER_GAIN: "100",
+            NORMALIZED_HEADER_OFFSET: "50",
+            NORMALIZED_HEADER_SETTEMP: "-10",
+            NORMALIZED_HEADER_READOUTMODE: "0",
+            NORMALIZED_HEADER_EXPOSURESECONDS: "300",
+            NORMALIZED_HEADER_FILTER: "Ha",
+            NORMALIZED_HEADER_DATE: "2024-01-15",
+            NORMALIZED_HEADER_OPTIC: "RedCat51",
+            NORMALIZED_HEADER_FOCALLEN: "250",
+        }
+
+    @patch(
+        "ap_copy_master_to_blink.flat_batch_selection"
+        ".find_candidate_dates_with_all_filters"
+    )
+    def test_logs_info_when_searching_candidates(self, mock_find):
+        """INFO log is emitted before searching for flat candidates."""
+        mock_find.return_value = {}
+
+        with self.assertLogs(
+            "ap_copy_master_to_blink.flat_batch_selection", level="INFO"
+        ) as cm:
+            resolve_flat_for_date(
+                self.library_dir,
+                self.light_metadata,
+                "2024-01-15",
+                {"Ha", "OIII"},
+                "/blink",
+                {},
+                quiet=False,
+                picker_limit=5,
+            )
+
+        log_output = "\n".join(cm.output)
+        self.assertIn("2024-01-15", log_output)
+        self.assertIn("Ha", log_output)
+        self.assertIn("OIII", log_output)
+        self.assertIn("No exact flat", log_output)
+
+    @patch(
+        "ap_copy_master_to_blink.flat_batch_selection"
+        ".find_candidate_dates_with_all_filters"
+    )
+    def test_no_info_log_in_quiet_mode(self, mock_find):
+        """INFO log is not emitted in quiet mode."""
+        result = resolve_flat_for_date(
+            self.library_dir,
+            self.light_metadata,
+            "2024-01-15",
+            {"Ha"},
+            "/blink",
+            {},
+            quiet=True,
+            picker_limit=5,
+        )
+
+        self.assertIsNone(result)
+        # find_candidate_dates_with_all_filters should not be called in quiet mode
+        mock_find.assert_not_called()
 
 
 if __name__ == "__main__":
